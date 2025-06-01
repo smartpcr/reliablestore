@@ -1,0 +1,30 @@
+version: '3.4'
+services:
+  catalog:
+    build: ./src/CatalogService
+    ports:
+      - "9001:9001"
+  order:
+    build: ./src/OrderService
+    ports:
+      - "9002:9002"
+  customer:
+    build: ./src/CustomerService
+    ports:
+      - "9003:9003"
+  payment:
+    build: ./src/PaymentService
+    ports:
+      - "9004:9004"
+  shipping:
+    build: ./src/ShippingService
+    ports:
+      - "9005:9005"
+  integration-tests:
+    build: ./tests/IntegrationTests
+    depends_on:
+      - catalog
+      - order
+      - customer
+      - payment
+      - shipping
