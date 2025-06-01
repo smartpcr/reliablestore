@@ -14,7 +14,7 @@ namespace Common.Tx
     /// <summary>
     /// Core transaction interface providing ACID semantics
     /// </summary>
-    public interface ITransaction : IDisposable
+    public interface ITransaction : IDisposable, IAsyncDisposable
     {
         /// <summary>
         /// Unique transaction identifier

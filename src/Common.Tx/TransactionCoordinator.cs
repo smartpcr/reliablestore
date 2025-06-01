@@ -559,6 +559,71 @@ namespace Common.Tx
             GC.SuppressFinalize(this);
         }
 
+        public async ValueTask DisposeAsync()
+        {
+            await DisposeAsyncCore();
+            Dispose(false); // Clean up unmanaged resources only
+            GC.SuppressFinalize(this);
+        }
+
+        protected virtual async ValueTask DisposeAsyncCore()
+        {
+            if (this.disposed || this.isDisposing)
+            {
+                return;
+            }
+
+            this.isDisposing = true;
+            this.logger.LogDebug("Disposing transaction {TransactionId} asynchronously", this.TransactionId);
+
+            // Stop the timeout timer
+            this.timeoutTimer?.Change(System.Threading.Timeout.InfiniteTimeSpan, System.Threading.Timeout.InfiniteTimeSpan);
+            this.timeoutTimer?.Dispose();
+
+            // Cancel any ongoing operations
+            if (!this.cancellationTokenSource.IsCancellationRequested)
+            {
+                this.cancellationTokenSource.Cancel();
+            }
+
+            // Handle auto-rollback if configured and transaction is still active
+            if (this.options.AutoRollbackOnDispose && this.State == TransactionState.Active)
+            {
+                this.logger.LogInformation("Auto-rolling back transaction {TransactionId} on async dispose", this.TransactionId);
+                try
+                {
+                    using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+                    await this.RollbackInternalAsync(timeoutCts.Token, TransactionState.RolledBack);
+                }
+                catch (OperationCanceledException ex) when (ex.CancellationToken.IsCancellationRequested)
+                {
+                    this.logger.LogWarning("Auto-rollback timed out during async dispose for transaction {TransactionId}", this.TransactionId);
+                    lock (this.stateLock)
+                    {
+                        this.state = TransactionState.Failed;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    this.logger.LogError(ex, "Error during auto-rollback on async dispose for transaction {TransactionId}", this.TransactionId);
+                    lock (this.stateLock)
+                    {
+                        this.state = TransactionState.Failed;
+                    }
+                }
+            }
+
+            // Clear collections to prevent memory leaks
+            this.savepoints.Clear();
+            lock (this.completionCallbacks)
+            {
+                this.completionCallbacks.Clear();
+            }
+
+            this.cancellationTokenSource.Dispose();
+            this.disposed = true;
+        }
+
         protected virtual void Dispose(bool disposing)
         {
             if (this.disposed)
@@ -583,32 +648,16 @@ namespace Common.Tx
                 this.cancellationTokenSource.Dispose();
 
                 // Handle auto-rollback if configured and transaction is still active
+                // Note: Synchronous dispose cannot safely await async operations
+                // Use DisposeAsync() for proper async disposal with rollback
                 if (this.options.AutoRollbackOnDispose && this.State == TransactionState.Active)
                 {
-                    this.logger.LogInformation("Auto-rolling back transaction {TransactionId} on dispose", this.TransactionId);
-                    try
+                    this.logger.LogWarning("Auto-rollback on dispose detected in synchronous Dispose() for transaction {TransactionId}. " +
+                        "Consider using DisposeAsync() for proper async disposal. Skipping rollback to avoid deadlocks.", this.TransactionId);
+                    
+                    lock (this.stateLock)
                     {
-                        // Use Task.Run to avoid deadlocks and configure to not wait indefinitely
-                        var rollbackTask = Task.Run(async () => 
-                            await this.RollbackInternalAsync(CancellationToken.None, TransactionState.RolledBack));
-                        
-                        // Wait with timeout to prevent hanging the dispose
-                        if (!rollbackTask.Wait(TimeSpan.FromSeconds(30)))
-                        {
-                            this.logger.LogWarning("Auto-rollback timed out during dispose for transaction {TransactionId}", this.TransactionId);
-                            lock (this.stateLock)
-                            {
-                                this.state = TransactionState.Failed;
-                            }
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        this.logger.LogError(ex, "Error during auto-rollback on dispose for transaction {TransactionId}", this.TransactionId);
-                        lock (this.stateLock)
-                        {
-                            this.state = TransactionState.Failed;
-                        }
+                        this.state = TransactionState.Failed;
                     }
                 }
 
