@@ -14,9 +14,20 @@
     <AspNetCoreVersion>2.3.0</AspNetCoreVersion>
   </PropertyGroup>
 
+  <!-- extension -->
+  <ItemGroup>
+    <PackageVersion Include="Microsoft.Extensions.Caching.Memory" Version="$(ExtensionVersion)" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="$(ExtensionVersion)" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="$(ExtensionVersion)" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting" Version="$(ExtensionVersion)" />
+    <PackageVersion Include="Microsoft.Extensions.Logging" Version="$(ExtensionVersion)" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Console" Version="$(ExtensionVersion)" />
+  </ItemGroup>
+
   <!-- third party -->
   <ItemGroup>
     <PackageVersion Include="Nerdbank.GitVersioning" Version="3.7.115" />
+    <PackageVersion Include="Unity" Version="5.11.7" />
   </ItemGroup>
 
   <!-- test -->
