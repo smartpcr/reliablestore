@@ -1,6 +1,6 @@
 # ReliableStore Proof of Concept
 
-This repository contains a minimal proof of concept of a distributed transaction store written for .NET Framework 4.6.2. It demonstrates how multiple microservices can interact with a shared file-based backend while ensuring transactional consistency.
+This repository contains a minimal proof of concept of a distributed transaction store written for .NET 8/9. It demonstrates how multiple microservices can interact with a shared file-based backend while ensuring transactional consistency.
 
 ## Projects
 
@@ -13,7 +13,7 @@ This repository contains a minimal proof of concept of a distributed transaction
 
 ## Running Services
 
-The repository includes a `docker-compose.yml` file targeting Windows containers. Build and run all services with:
+The repository includes a `docker-compose.yml` file that uses the official .NET runtime images (such as `mcr.microsoft.com/dotnet/runtime:8.0` or `9.0`). Build and run all services with:
 
 ```bash
 docker-compose build
@@ -24,5 +24,5 @@ Integration tests run in a dedicated container and depend on all services.
 
 ## Notes
 
-- Services target **.NET Framework 4.6.2** and rely on Windows Docker images.
+- Services target **.NET 8/9** and rely on the official .NET runtime images (e.g., `mcr.microsoft.com/dotnet/runtime:8.0`).
 - File-based repositories are used only for demonstration purposes and are not suitable for production.
