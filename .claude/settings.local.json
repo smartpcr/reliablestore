@@ -6,7 +6,11 @@
       "Bash(dotnet clean:*)",
       "Bash(dotnet test)",
       "Bash(dotnet sln remove:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(mkdir:*)",
+      "Bash(docker build:*)",
+      "Bash(dotnet build:*)",
+      "Bash(docker rmi:*)"
     ],
     "deny": []
   }

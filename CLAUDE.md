@@ -83,4 +83,29 @@ All entities are stored using FileStore<T> from Common.Persistence:
 - Payments: `data/payments.json`
 - Shipments: `data/shipments.json`
 
+### Docker Commands
+
+```bash
+# Build and run all services with Docker Compose
+docker-compose up --build
+
+# Build specific service Docker image
+docker build -f src/CatalogService/Dockerfile -t reliablestore-catalog .
+
+# Run services in background
+docker-compose up -d
+
+# View logs
+docker-compose logs -f [service-name]
+
+# Stop all services
+docker-compose down
+```
+
+### GitHub Actions
+
+The repository includes CI/CD workflows:
+- **ci-cd.yml**: Builds, tests, and publishes artifacts on push/PR
+- **docker-build.yml**: Builds and pushes Docker images to GitHub Container Registry
+
 When adding new functionality, ensure tests are added to the appropriate test project and follow the existing patterns for unit testing with xUnit.

@@ -27,6 +27,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = ".build", ".build", "{158B36
 		stylecop.ruleset = stylecop.ruleset
 		version.json = version.json
 		global.json = global.json
+		docker-compose.yml = docker-compose.yml
 	EndProjectSection
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "PoC", "PoC", "{EA991D59-541F-4E4C-BC1E-BCEBD0DD93AF}"

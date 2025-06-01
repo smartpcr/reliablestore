@@ -1,0 +1,58 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  DOTNET_VERSION: '9.0.x'
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Fetch full history for GitVersion
+    
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+        
+    - name: Restore dependencies
+      run: dotnet restore
+      
+    - name: Build solution
+      run: dotnet build --no-restore --configuration Release
+      
+    - name: Run tests
+      run: dotnet test --no-build --configuration Release --verbosity normal --collect:"XPlat Code Coverage"
+      
+    - name: Upload coverage reports
+      uses: codecov/codecov-action@v4
+      if: success()
+      with:
+        files: '**/coverage.cobertura.xml'
+        fail_ci_if_error: false
+        
+    - name: Publish artifacts
+      run: |
+        dotnet publish src/CatalogService/CatalogService.csproj -c Release -o ./publish/catalog --no-restore
+        dotnet publish src/CustomerService/CustomerService.csproj -c Release -o ./publish/customer --no-restore
+        dotnet publish src/OrderService/OrderService.csproj -c Release -o ./publish/order --no-restore
+        dotnet publish src/PaymentService/PaymentService.csproj -c Release -o ./publish/payment --no-restore
+        dotnet publish src/ShippingService/ShippingService.csproj -c Release -o ./publish/shipping --no-restore
+        
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: published-apps
+        path: ./publish/
+        retention-days: 30

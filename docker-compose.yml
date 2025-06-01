@@ -1,30 +1,95 @@
-version: '3.4'
+version: '3.8'
+
 services:
-  catalog:
-    build: ./src/CatalogService
+  catalog-service:
+    build:
+      context: .
+      dockerfile: src/CatalogService/Dockerfile
     ports:
-      - "9001:9001"
-  order:
-    build: ./src/OrderService
+      - "9001:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:8080
+    volumes:
+      - ./data/catalog:/app/data
+    networks:
+      - reliablestore-network
+    restart: unless-stopped
+
+  customer-service:
+    build:
+      context: .
+      dockerfile: src/CustomerService/Dockerfile
     ports:
-      - "9002:9002"
-  customer:
-    build: ./src/CustomerService
+      - "9002:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:8080
+    volumes:
+      - ./data/customer:/app/data
+    networks:
+      - reliablestore-network
+    restart: unless-stopped
+
+  order-service:
+    build:
+      context: .
+      dockerfile: src/OrderService/Dockerfile
     ports:
-      - "9003:9003"
-  payment:
-    build: ./src/PaymentService
-    ports:
-      - "9004:9004"
-  shipping:
-    build: ./src/ShippingService
-    ports:
-      - "9005:9005"
-  integration-tests:
-    build: ./tests/IntegrationTests
+      - "9003:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:8080
+    volumes:
+      - ./data/order:/app/data
+      - ./data/shared:/app/shared  # Shared data for cross-service coordination
+    networks:
+      - reliablestore-network
     depends_on:
-      - catalog
-      - order
-      - customer
-      - payment
-      - shipping
+      - catalog-service
+      - customer-service
+      - payment-service
+      - shipping-service
+    restart: unless-stopped
+
+  payment-service:
+    build:
+      context: .
+      dockerfile: src/PaymentService/Dockerfile
+    ports:
+      - "9004:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:8080
+    volumes:
+      - ./data/payment:/app/data
+    networks:
+      - reliablestore-network
+    restart: unless-stopped
+
+  shipping-service:
+    build:
+      context: .
+      dockerfile: src/ShippingService/Dockerfile
+    ports:
+      - "9005:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:8080
+    volumes:
+      - ./data/shipping:/app/data
+    networks:
+      - reliablestore-network
+    restart: unless-stopped
+
+networks:
+  reliablestore-network:
+    driver: bridge
+
+volumes:
+  catalog-data:
+  customer-data:
+  order-data:
+  payment-data:
+  shipping-data:
+  shared-data:
