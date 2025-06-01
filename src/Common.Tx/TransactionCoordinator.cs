@@ -417,14 +417,13 @@ namespace Common.Tx
 
         private async Task<bool> PrepareResourceSafely(ITransactionalResource resource, CancellationToken cancellationToken)
         {
+            var resourceTimeout = this.options.ResourceOperationTimeout ?? TimeSpan.FromMinutes(2);
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeoutCts.CancelAfter(resourceTimeout);
+
             try
             {
                 this.logger.LogDebug("Preparing resource {ResourceId} in transaction {TransactionId}", resource.ResourceId, this.TransactionId);
-                
-                // Add timeout protection for resource operations
-                using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-                var resourceTimeout = this.options.ResourceOperationTimeout ?? TimeSpan.FromMinutes(2);
-                timeoutCts.CancelAfter(resourceTimeout);
                 
                 var prepared = await resource.PrepareAsync(this, timeoutCts.Token);
                 if (!prepared)
@@ -434,6 +433,11 @@ namespace Common.Tx
                 }
                 this.logger.LogDebug("Successfully prepared resource {ResourceId} in transaction {TransactionId}", resource.ResourceId, this.TransactionId);
                 return true;
+            }
+            catch (OperationCanceledException ex) when (timeoutCts.Token.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+            {
+                this.logger.LogWarning("Prepare operation timed out for resource {ResourceId} in transaction {TransactionId} after {Timeout}", resource.ResourceId, this.TransactionId, resourceTimeout);
+                throw new TransactionTimeoutException($"Resource {resource.ResourceId} prepare operation timed out after {resourceTimeout}", ex);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -472,17 +476,21 @@ namespace Common.Tx
 
         private async Task CommitResourceSafely(ITransactionalResource resource, CancellationToken cancellationToken)
         {
+            var resourceTimeout = this.options.ResourceOperationTimeout ?? TimeSpan.FromMinutes(2);
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeoutCts.CancelAfter(resourceTimeout);
+
             try
             {
                 this.logger.LogDebug("Committing resource {ResourceId} in transaction {TransactionId}", resource.ResourceId, this.TransactionId);
                 
-                // Add timeout protection for commit operations
-                using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-                var resourceTimeout = this.options.ResourceOperationTimeout ?? TimeSpan.FromMinutes(2);
-                timeoutCts.CancelAfter(resourceTimeout);
-                
                 await resource.CommitAsync(this, timeoutCts.Token);
                 this.logger.LogDebug("Successfully committed resource {ResourceId} in transaction {TransactionId}", resource.ResourceId, this.TransactionId);
+            }
+            catch (OperationCanceledException ex) when (timeoutCts.Token.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+            {
+                this.logger.LogWarning("Commit operation timed out for resource {ResourceId} in transaction {TransactionId} after {Timeout}", resource.ResourceId, this.TransactionId, resourceTimeout);
+                throw new TransactionTimeoutException($"Resource {resource.ResourceId} commit operation timed out after {resourceTimeout}", ex);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
