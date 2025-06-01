@@ -23,6 +23,7 @@
     <PackageVersion Include="Microsoft.Extensions.Logging" Version="$(ExtensionVersion)" />
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="$(ExtensionVersion)" />
     <PackageVersion Include="Microsoft.Extensions.Logging.Console" Version="$(ExtensionVersion)" />
+    <PackageVersion Include="Microsoft.Extensions.Options" Version="$(ExtensionVersion)" />
   </ItemGroup>
 
   <!-- third party -->

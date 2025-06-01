@@ -15,7 +15,10 @@
       "Bash(rg:*)",
       "Bash(/home/xd/.nvm/versions/node/v22.16.0/lib/node_modules/@anthropic-ai/claude-code/vendor/ripgrep/x64-linux/rg -n \"namespace\\s+[^{]+\\{\\s*\\{\\s*using\" /mnt/e/work/github/crp/reliablestore/src --type cs)",
       "Bash(dotnet test:*)",
-      "Bash(dotnet restore)"
+      "Bash(dotnet restore)",
+      "Bash(rm:*)",
+      "Bash(rm:*)",
+      "Bash(rm:*)"
     ],
     "deny": []
   }

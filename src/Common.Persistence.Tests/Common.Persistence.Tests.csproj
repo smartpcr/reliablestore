@@ -1,4 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
-
-
+  <ItemGroup>
+    <ProjectReference Include="..\Common.Persistence.Providers.FileSystem\Common.Persistence.Providers.FileSystem.csproj" />
+    <ProjectReference Include="..\Common.Persistence.Providers.InMemory\Common.Persistence.Providers.InMemory.csproj" />
+    <ProjectReference Include="..\Common.Persistence\Common.Persistence.csproj" />
+  </ItemGroup>
 </Project>
