@@ -18,6 +18,9 @@ namespace Common.Tx
     /// </summary>
     public static class TransactionExtensions
     {
+        // For .NET 6+ Random.Shared would be preferred. For broader compatibility, a static instance is used.
+        private static readonly Random _jitterer = new Random();
+
         /// <summary>
         /// Register basic transaction services with Unity container
         /// For full URP integration, use UnityTransactionConfiguration.RegisterUrpTransactionServices()
@@ -69,9 +72,8 @@ namespace Common.Tx
                 }
                 catch (Exception rollbackEx)
                 {
-                    // It's crucial to log both the original exception (ex) and the rollbackEx here.
-                    // For example, using an ILogger:
-                    // logger.LogError(rollbackEx, "Transaction rollback failed after an initial operation failure. Original exception: {OriginalExceptionType}", ex.GetType().Name);
+                    // Consider logging both ex and rollbackEx here using a proper logging framework.
+                    // e.g., logger.LogError(rollbackEx, "Transaction rollback failed after an initial operation failure. Original exception: {OriginalExceptionType}", ex.GetType().Name);
                     throw new AggregateException("Transaction failed and rollback also failed. See inner exceptions for details.", ex, rollbackEx);
                 }
                 throw; // Rethrow the original exception if rollback succeeded
@@ -108,9 +110,7 @@ namespace Common.Tx
                 }
                 catch (Exception rollbackEx)
                 {
-                    // It's crucial to log both the original exception (ex) and the rollbackEx here.
-                    // For example, using an ILogger:
-                    // logger.LogError(rollbackEx, "Transaction rollback failed after an initial operation failure. Original exception: {OriginalExceptionType}", ex.GetType().Name);
+                    // Consider logging both ex and rollbackEx here.
                     throw new AggregateException("Transaction failed and rollback also failed. See inner exceptions for details.", ex, rollbackEx);
                 }
                 throw; // Rethrow the original exception if rollback succeeded
@@ -127,7 +127,7 @@ namespace Common.Tx
         /// <param name="factory">The transaction factory.</param>
         /// <param name="action">The action to execute within a transaction.</param>
         /// <param name="maxRetries">The total number of attempts to make. Must be at least 1.</param>
-        /// <param name="retryDelay">The base delay between retries. This delay will be exponentially backed off.</param>
+        /// <param name="retryDelay">The base delay between retries. This delay will be exponentially backed off with jitter.</param>
         /// <param name="options">Transaction options.</param>
         /// <param name="cancellationToken">A cancellation token to observe.</param>
         public static async Task ExecuteWithRetryAsync(this ITransactionFactory factory,
@@ -144,7 +144,6 @@ namespace Common.Tx
 
             retryDelay ??= TimeSpan.FromMilliseconds(500);
             var attempts = 0;
-            // Exception lastException = null; // No longer needed here as the final throw is removed
 
             while (attempts < maxRetries)
             {
@@ -156,21 +155,23 @@ namespace Common.Tx
                 }
                 catch (Exception ex) when (IsRetryableException(ex, cancellationToken) && attempts < maxRetries - 1)
                 {
-                    // lastException = ex; // Store if needed for logging, but not for the final throw
                     attempts++;
 
-                    var delay = TimeSpan.FromMilliseconds(retryDelay.Value.TotalMilliseconds * Math.Pow(2, attempts - 1));
-                    await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
+                    double baseDelayMs = retryDelay.Value.TotalMilliseconds * Math.Pow(2, attempts - 1);
+                    // Add jitter: e.g., +/- 10% of the current delay component.
+                    // Ensures the jitter amount is at least 1ms if baseDelayMs is very small, to have some effect.
+                    double jitterMagnitude = Math.Max(1.0, baseDelayMs * 0.1);
+                    double jitterMs = (_jitterer.NextDouble() * 2.0 * jitterMagnitude) - jitterMagnitude; // Random number between -jitterMagnitude and +jitterMagnitude
+
+                    double finalDelayMs = Math.Max(0, baseDelayMs + jitterMs); // Ensure non-negative delay
+
+                    await Task.Delay(TimeSpan.FromMilliseconds(finalDelayMs), cancellationToken).ConfigureAwait(false);
                 }
                 // If the exception was not caught by the 'when' clause (non-retryable or last attempt),
                 // it will propagate out of this try-catch, then out of the while loop, and be thrown by the caller.
-                // This is the desired behavior for the final attempt's failure.
             }
-            // If the loop completes, it means all retries were attempted and the last one failed,
-            // and its exception has already propagated. Or, success occurred and returned.
-            // Thus, this point should not be reached if maxRetries >= 1 and an exception occurred on the last attempt.
-            // The compiler ensures all paths return for Task<T>; for Task, an unhandled path would mean implicit completion.
-            // The logic above ensures an exception from the final attempt propagates, or success returns.
+            // If the loop completes, it means all retries were attempted and the last one failed (its exception propagated),
+            // or success occurred and returned. No code needed here for the non-generic Task version.
         }
 
         /// <summary>
@@ -180,7 +181,7 @@ namespace Common.Tx
         /// <param name="factory">The transaction factory.</param>
         /// <param name="func">The function to execute within a transaction.</param>
         /// <param name="maxRetries">The total number of attempts to make. Must be at least 1.</param>
-        /// <param name="retryDelay">The base delay between retries. This delay will be exponentially backed off.</param>
+        /// <param name="retryDelay">The base delay between retries. This delay will be exponentially backed off with jitter.</param>
         /// <param name="options">Transaction options.</param>
         /// <param name="cancellationToken">A cancellation token to observe.</param>
         /// <returns>The result of the function.</returns>
@@ -198,7 +199,6 @@ namespace Common.Tx
 
             retryDelay ??= TimeSpan.FromMilliseconds(500);
             var attempts = 0;
-            // Exception lastException = null; // No longer needed here
 
             while (attempts < maxRetries)
             {
@@ -209,25 +209,20 @@ namespace Common.Tx
                 }
                 catch (Exception ex) when (IsRetryableException(ex, cancellationToken) && attempts < maxRetries - 1)
                 {
-                    // lastException = ex; // Store if needed for logging
                     attempts++;
 
-                    var delay = TimeSpan.FromMilliseconds(retryDelay.Value.TotalMilliseconds * Math.Pow(2, attempts - 1));
-                    await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
+                    double baseDelayMs = retryDelay.Value.TotalMilliseconds * Math.Pow(2, attempts - 1);
+                    double jitterMagnitude = Math.Max(1.0, baseDelayMs * 0.1);
+                    double jitterMs = (_jitterer.NextDouble() * 2.0 * jitterMagnitude) - jitterMagnitude;
+                    double finalDelayMs = Math.Max(0, baseDelayMs + jitterMs);
+
+                    await Task.Delay(TimeSpan.FromMilliseconds(finalDelayMs), cancellationToken).ConfigureAwait(false);
                 }
             }
-            // As with the non-generic version, if the loop finishes, the exception from the
-            // final attempt has propagated, or success returned.
-            // For Task<T>, the compiler enforces that all paths must return a value or throw.
-            // The structure ensures this. If this line were reachable, it would be a compiler error
-            // for Task<T> unless it threw or returned.
-            // Given the logic, it's not expected to be reached if the last attempt fails.
-            // If it were, `throw new InvalidOperationException("All retries failed and loop exited unexpectedly.");`
-            // might be appropriate, but the current logic should prevent this.
-            // The C# compiler will verify that all code paths return a value or throw an exception for methods returning Task<T>.
-            // Since the loop either returns on success or the exception from the last attempt propagates,
-            // this point is effectively unreachable.
-            throw new InvalidOperationException("All retry attempts failed. This line should be unreachable if logic is correct."); // Should be optimized away or indicate a logic flaw if hit.
+            // This line is for compiler satisfaction, as all code paths in a Task<T>-returning method must return or throw.
+            // Logically, it should be unreachable if maxRetries >= 1, as the loop either returns on success
+            // or the exception from the final attempt propagates out.
+            throw new InvalidOperationException("All retry attempts failed. This indicates an unexpected state or flaw in retry logic if reached.");
         }
 
         /// <summary>
@@ -248,7 +243,6 @@ namespace Common.Tx
             this IRepository<TData> repository,
             ITransactionalRepositoryFactory factory) where TData : class
         {
-            // Factory is now responsible for creation and enlistment
             return factory.CreateTransactionalRepository(repository);
         }
 
@@ -261,38 +255,33 @@ namespace Common.Tx
             }
             else if (ex is TaskCanceledException tce && tce.InnerException is OperationCanceledException tceInnerOce)
             {
-                // If TaskCanceledException wraps an OperationCanceledException, check the inner one.
                 oceToTest = tceInnerOce;
             }
 
             if (oceToTest != null)
             {
-                // If the cancellation is due to the operation's own token, it's not retryable.
                 if (operationToken.CanBeCanceled && oceToTest.CancellationToken == operationToken && operationToken.IsCancellationRequested)
                 {
-                    return false;
+                    return false; // Not retryable if due to the operation's own token being cancelled.
                 }
-                // If oceToTest.CancellationToken is not our operationToken, or if operationToken was not cancelled,
-                // then this specific OperationCanceledException might be from another source (e.g. an internal timeout that self-cancels)
-                // and could be considered retryable by the general checks below.
             }
 
             // General retryable conditions
-            if (ex is TimeoutException ||
-                ex is TransactionTimeoutException)
+            if (ex is TimeoutException || ex is TransactionTimeoutException)
                 return true;
 
-            // These checks cover OperationCanceledExceptions/TaskCanceledExceptions not caught by the specific operationToken check above.
-            // For example, an internal operation timing out and cancelling itself via a different CancellationToken.
+            // These cover OperationCanceledExceptions/TaskCanceledExceptions not caught by the specific operationToken check.
+            // e.g., an internal operation timing out and cancelling itself via a different CancellationToken.
             if (ex is TaskCanceledException || ex is OperationCanceledException)
             {
+                 // If it's an OCE not from our operationToken, or a TCE not wrapping such an OCE, consider it retryable.
                 return true;
             }
 
             if (ex is TransactionException txEx)
             {
                 return txEx.TransactionState == TransactionState.Timeout ||
-                       (txEx.InnerException != null && IsRetryableException(txEx.InnerException, operationToken)); // Recursive call
+                       (txEx.InnerException != null && IsRetryableException(txEx.InnerException, operationToken));
             }
 
             return false; // Default to not retryable
