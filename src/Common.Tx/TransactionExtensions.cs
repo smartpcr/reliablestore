@@ -144,7 +144,7 @@ namespace Common.Tx
 
             retryDelay ??= TimeSpan.FromMilliseconds(500);
             var attempts = 0;
-            Exception lastException = null;
+            // Exception lastException = null; // No longer needed here as the final throw is removed
 
             while (attempts < maxRetries)
             {
@@ -156,52 +156,21 @@ namespace Common.Tx
                 }
                 catch (Exception ex) when (IsRetryableException(ex, cancellationToken) && attempts < maxRetries - 1)
                 {
-                    lastException = ex;
+                    // lastException = ex; // Store if needed for logging, but not for the final throw
                     attempts++;
 
-                    // Exponential backoff: delay * 2^(attempts-1)
-                    // For attempts = 1 (first retry), multiplier is 2^0 = 1
-                    // For attempts = 2 (second retry), multiplier is 2^1 = 2
                     var delay = TimeSpan.FromMilliseconds(retryDelay.Value.TotalMilliseconds * Math.Pow(2, attempts - 1));
                     await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
                 }
                 // If the exception was not caught by the 'when' clause (non-retryable or last attempt),
                 // it will propagate out of this try-catch, then out of the while loop, and be thrown by the caller.
-                // If it's the last attempt and it fails, the exception from ExecuteInTransactionAsync will be thrown directly.
+                // This is the desired behavior for the final attempt's failure.
             }
-
-            // This part is reached if all retries failed with a retryable exception.
-            // The exception from the final attempt would have been thrown directly by ExecuteInTransactionAsync
-            // if it was non-retryable or if it was the last attempt.
-            // If the loop completes due to maxRetries being exhausted with retryable exceptions,
-            // throw the last recorded exception.
-            // However, the current structure means the exception from the last attempt's ExecuteInTransactionAsync
-            // will be the one that propagates if it's not caught by the 'when' clause.
-            // This final throw is a safeguard or for clarity if the loop condition was different.
-            // Given the current loop and catch-when, if all attempts fail, the exception from the *last* ExecuteInTransactionAsync call
-            // will be the one that's thrown, not necessarily 'lastException' from a *previous* retryable attempt.
-            // To ensure the *very last* exception is thrown:
-            // The exception from the final attempt (attempts == maxRetries - 1) will not enter the 'when' block's
-            // "attempts < maxRetries - 1" condition, so it will propagate out.
-            // Thus, this explicit throw below is technically only hit if maxRetries was 1 and it failed retryably (which is not possible with current IsRetryableException logic for the first attempt).
-            // Or if maxRetries is 0 (which is now guarded).
-            // Let's simplify: the exception from the last attempt will naturally propagate.
-            // The only scenario for `lastException` to be non-null and this line to be reached is if
-            // the loop condition was different. With `attempts < maxRetries`, the last attempt's exception
-            // will directly exit the loop.
-            // So, if the loop finishes, it means all attempts (up to maxRetries-1) were caught and retried.
-            // The final attempt (attempts = maxRetries-1) happens, and if it throws, that exception propagates.
-            // This line is effectively a fallback, but the primary path for failure is the exception from the last ExecuteInTransactionAsync call.
-            // If maxRetries is 1, and it fails with a retryable exception, the `when` condition `attempts < maxRetries - 1` (0 < 0) is false, so it throws.
-            // If maxRetries is 3:
-            // attempt 0: fails retryable, caught, attempts becomes 1, delay.
-            // attempt 1: fails retryable, caught, attempts becomes 2, delay.
-            // attempt 2: fails (retryable or not), `attempts < maxRetries - 1` (2 < 2) is false. Exception propagates from ExecuteInTransactionAsync.
-            // So, lastException here will be from the second-to-last attempt if the last one was also retryable.
-            // The exception that should be thrown is the one from the *final* attempt.
-            // The current structure correctly throws the exception from the final attempt.
-            // This line is a fallback for an unexpected state or if maxRetries is 0 (now handled).
-            throw lastException ?? new InvalidOperationException("All retry attempts failed. The final attempt's exception should have been thrown.");
+            // If the loop completes, it means all retries were attempted and the last one failed,
+            // and its exception has already propagated. Or, success occurred and returned.
+            // Thus, this point should not be reached if maxRetries >= 1 and an exception occurred on the last attempt.
+            // The compiler ensures all paths return for Task<T>; for Task, an unhandled path would mean implicit completion.
+            // The logic above ensures an exception from the final attempt propagates, or success returns.
         }
 
         /// <summary>
@@ -229,7 +198,7 @@ namespace Common.Tx
 
             retryDelay ??= TimeSpan.FromMilliseconds(500);
             var attempts = 0;
-            Exception lastException = null;
+            // Exception lastException = null; // No longer needed here
 
             while (attempts < maxRetries)
             {
@@ -240,19 +209,25 @@ namespace Common.Tx
                 }
                 catch (Exception ex) when (IsRetryableException(ex, cancellationToken) && attempts < maxRetries - 1)
                 {
-                    lastException = ex;
+                    // lastException = ex; // Store if needed for logging
                     attempts++;
 
                     var delay = TimeSpan.FromMilliseconds(retryDelay.Value.TotalMilliseconds * Math.Pow(2, attempts - 1));
                     await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
                 }
-                // If the exception was not caught by the 'when' clause (non-retryable or last attempt),
-                // it will propagate out of this try-catch, then out of the while loop, and be returned/thrown by the caller.
             }
-
-            // Similar to the non-generic version, the exception from the final attempt will propagate.
-            // This is a fallback.
-            throw lastException ?? new InvalidOperationException("All retry attempts failed. The final attempt's exception should have been thrown.");
+            // As with the non-generic version, if the loop finishes, the exception from the
+            // final attempt has propagated, or success returned.
+            // For Task<T>, the compiler enforces that all paths must return a value or throw.
+            // The structure ensures this. If this line were reachable, it would be a compiler error
+            // for Task<T> unless it threw or returned.
+            // Given the logic, it's not expected to be reached if the last attempt fails.
+            // If it were, `throw new InvalidOperationException("All retries failed and loop exited unexpectedly.");`
+            // might be appropriate, but the current logic should prevent this.
+            // The C# compiler will verify that all code paths return a value or throw an exception for methods returning Task<T>.
+            // Since the loop either returns on success or the exception from the last attempt propagates,
+            // this point is effectively unreachable.
+            throw new InvalidOperationException("All retry attempts failed. This line should be unreachable if logic is correct."); // Should be optimized away or indicate a logic flaw if hit.
         }
 
         /// <summary>
@@ -279,33 +254,48 @@ namespace Common.Tx
 
         private static bool IsRetryableException(Exception ex, CancellationToken operationToken = default)
         {
+            OperationCanceledException oceToTest = null;
             if (ex is OperationCanceledException oce)
             {
-                // If the OperationCanceledException's token is the same as the operation's token,
-                // and cancellation has been requested for that token, it's not retryable.
-                // This check is crucial to respect explicit cancellation requests.
-                // Also check if the operationToken is actually cancelable, otherwise oce.CancellationToken might be default(CancellationToken)
-                // which would match an uncancelable operationToken.
-                if (operationToken.CanBeCanceled && oce.CancellationToken == operationToken && operationToken.IsCancellationRequested)
+                oceToTest = oce;
+            }
+            else if (ex is TaskCanceledException tce && tce.InnerException is OperationCanceledException tceInnerOce)
+            {
+                // If TaskCanceledException wraps an OperationCanceledException, check the inner one.
+                oceToTest = tceInnerOce;
+            }
+
+            if (oceToTest != null)
+            {
+                // If the cancellation is due to the operation's own token, it's not retryable.
+                if (operationToken.CanBeCanceled && oceToTest.CancellationToken == operationToken && operationToken.IsCancellationRequested)
                 {
                     return false;
                 }
-                // If the OCE is from a different token, an unspecified token, or the operationToken wasn't cancelable,
-                // it might represent an internal timeout that could be retried.
+                // If oceToTest.CancellationToken is not our operationToken, or if operationToken was not cancelled,
+                // then this specific OperationCanceledException might be from another source (e.g. an internal timeout that self-cancels)
+                // and could be considered retryable by the general checks below.
             }
-            // TaskCanceledException often wraps an OperationCanceledException.
-            // If ex is TaskCanceledException and its InnerException is OperationCanceledException,
-            // the logic above for OperationCanceledException would apply if we checked ex.InnerException.
-            // For simplicity here, we'll treat TaskCanceledException generally, but be mindful it might stem from operationToken.
-            // A more robust check might involve inspecting TaskCanceledException.InnerException if it's an OCE.
 
-            return ex is TimeoutException ||
-                   ex is TaskCanceledException || // Could be due to operationToken, but often from other sources like HttpClient timeout
-                   ex is OperationCanceledException || // Handled above for specific operationToken case
-                   ex is TransactionTimeoutException ||
-                   (ex is TransactionException txEx &&
-                    (txEx.TransactionState == TransactionState.Timeout ||
-                     (txEx.InnerException != null && IsRetryableException(txEx.InnerException, operationToken)))); // Recursive call
+            // General retryable conditions
+            if (ex is TimeoutException ||
+                ex is TransactionTimeoutException)
+                return true;
+
+            // These checks cover OperationCanceledExceptions/TaskCanceledExceptions not caught by the specific operationToken check above.
+            // For example, an internal operation timing out and cancelling itself via a different CancellationToken.
+            if (ex is TaskCanceledException || ex is OperationCanceledException)
+            {
+                return true;
+            }
+
+            if (ex is TransactionException txEx)
+            {
+                return txEx.TransactionState == TransactionState.Timeout ||
+                       (txEx.InnerException != null && IsRetryableException(txEx.InnerException, operationToken)); // Recursive call
+            }
+
+            return false; // Default to not retryable
         }
     }
 }
