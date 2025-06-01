@@ -34,9 +34,8 @@ dotnet test src/Common.Tx.Tests/Common.Tx.Tests.csproj
 ReliableStore is a .NET 9.0 distributed transaction management solution with microservices demonstrating transactional consistency. The solution includes:
 
 ### Core Libraries
-1. **Common.Persistence** - Core data persistence library providing abstractions and implementations for reliable data storage
-2. **Common.Tx** - Transaction management library for coordinating transactions, including distributed transaction support
-3. **ReliableStore** - File-based repository implementation with transactional support
+1. **Common.Persistence** - Core data persistence library with FileStore implementation for file-based storage and entity definitions (Product, Order, Customer, Payment, Shipment)
+2. **Common.Tx** - Advanced transaction management library providing distributed transaction support with ACID guarantees
 
 ### Microservices (Proof of Concept)
 All services use modern ASP.NET Core hosting with Microsoft.Extensions.Hosting:
@@ -64,5 +63,24 @@ All services use modern ASP.NET Core hosting with Microsoft.Extensions.Hosting:
 - StyleCop integration with custom ruleset
 - Code coverage via coverlet collector
 - Multi-platform support (win-x64, linux-x64, osx-x64)
+
+### Transaction Usage
+
+Services use Common.Tx for distributed transactions:
+```csharp
+using var transaction = _transactionFactory.CreateTransaction();
+transaction.EnlistResource(_fileStore);
+await _fileStore.SaveAsync(key, entity);
+await transaction.CommitAsync();
+```
+
+### Entity Storage
+
+All entities are stored using FileStore<T> from Common.Persistence:
+- Products: `data/products.json`
+- Orders: `data/orders.json` 
+- Customers: `data/customers.json`
+- Payments: `data/payments.json`
+- Shipments: `data/shipments.json`
 
 When adding new functionality, ensure tests are added to the appropriate test project and follow the existing patterns for unit testing with xUnit.

@@ -3,6 +3,9 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using Common.Persistence;
+using Common.Tx;
 
 namespace ShippingService
 {
@@ -18,6 +21,16 @@ namespace ShippingService
         public void ConfigureServices(IServiceCollection services)
         {
             services.AddControllers();
+            
+            // Register FileStore for Shipment
+            services.AddSingleton<FileStore<Shipment>>(provider =>
+            {
+                var logger = provider.GetRequiredService<ILogger<FileStore<Shipment>>>();
+                return new FileStore<Shipment>("data/shipments.json", logger);
+            });
+            
+            // Register transaction services
+            services.AddTransactionSupport();
         }
 
         public void Configure(IApplicationBuilder app, IWebHostEnvironment env)

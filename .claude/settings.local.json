@@ -4,7 +4,9 @@
       "Bash(find:*)",
       "Bash(dotnet build)",
       "Bash(dotnet clean:*)",
-      "Bash(dotnet test)"
+      "Bash(dotnet test)",
+      "Bash(dotnet sln remove:*)",
+      "Bash(grep:*)"
     ],
     "deny": []
   }

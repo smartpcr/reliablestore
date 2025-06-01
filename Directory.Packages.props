@@ -21,6 +21,7 @@
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="$(ExtensionVersion)" />
     <PackageVersion Include="Microsoft.Extensions.Hosting" Version="$(ExtensionVersion)" />
     <PackageVersion Include="Microsoft.Extensions.Logging" Version="$(ExtensionVersion)" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="$(ExtensionVersion)" />
     <PackageVersion Include="Microsoft.Extensions.Logging.Console" Version="$(ExtensionVersion)" />
   </ItemGroup>
 
