@@ -1,10 +1,57 @@
-<Project>
+<?xml version="1.0" encoding="utf-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <ExtensionVersion>9.0.3</ExtensionVersion>
+    <ExtensionNextVersion>9.3.0</ExtensionNextVersion>
+    <OpenTelemetryVersion>1.12.0</OpenTelemetryVersion>
+    <MSTestVersion>3.0.4</MSTestVersion>
+    <ReqnrollVersion>2.4.0</ReqnrollVersion>
+    <KustoVersion>13.0.2</KustoVersion>
+    <AspNetCoreVersion>2.3.0</AspNetCoreVersion>
+  </PropertyGroup>
+
+  <!-- extension -->
   <ItemGroup>
-    <PackageVersion Include="Microsoft.Owin" Version="4.2.2" />
-    <PackageVersion Include="Microsoft.Owin.Hosting" Version="4.2.2" />
-    <PackageVersion Include="Microsoft.AspNet.WebApi.Owin" Version="5.2.9" />
-    <PackageVersion Include="Newtonsoft.Json" Version="13.0.3" />
-    <PackageVersion Include="MSTest.TestFramework" Version="3.1.0" />
-    <PackageVersion Include="MSTest.TestAdapter" Version="3.1.0" />
+    <PackageVersion Include="Microsoft.Extensions.Caching.Memory" Version="$(ExtensionVersion)" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="$(ExtensionVersion)" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="$(ExtensionVersion)" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting" Version="$(ExtensionVersion)" />
+    <PackageVersion Include="Microsoft.Extensions.Logging" Version="$(ExtensionVersion)" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Console" Version="$(ExtensionVersion)" />
+  </ItemGroup>
+
+  <!-- third party -->
+  <ItemGroup>
+    <PackageVersion Include="Nerdbank.GitVersioning" Version="3.7.115" />
+    <PackageVersion Include="Unity" Version="5.11.7" />
+  </ItemGroup>
+
+  <!-- test -->
+  <ItemGroup Label="UnitTests">
+    <PackageVersion Include="coverlet.collector" Version="6.0.4">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageVersion>
+    <PackageVersion Include="FluentAssertions" Version="8.2.0" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.13.0"/>
+    <PackageVersion Include="MSTest.TestAdapter" Version="$(MSTestVersion)"/>
+    <PackageVersion Include="MSTest.TestFramework" Version="$(MSTestVersion)"/>
+    <PackageVersion Include="Reqnroll" Version="$(ReqnrollVersion)" />
+    <PackageVersion Include="Reqnroll.CustomPlugin" Version="$(ReqnrollVersion)" />
+    <PackageVersion Include="Reqnroll.ExternalData" Version="$(ReqnrollVersion)" />
+    <PackageVersion Include="Reqnroll.Microsoft.Extensions.DependencyInjection" Version="$(ReqnrollVersion)" />
+    <PackageVersion Include="Reqnroll.MsTest" Version="$(ReqnrollVersion)" />
+    <PackageVersion Include="Reqnroll.SpecFlowCompatibility" Version="$(ReqnrollVersion)" />
+    <PackageVersion Include="Reqnroll.Tools.MsBuild.Generation" Version="$(ReqnrollVersion)" />
+    <PackageVersion Include="Reqnroll.xUnit" Version="$(ReqnrollVersion)" />
+    <PackageVersion Include="xunit" Version="2.9.3" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="3.0.2">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageVersion>
   </ItemGroup>
 </Project>

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project>
+  <Target Name="DeleteFiles" AfterTargets="Build">
+    <Message Text="Deleting $(OutDir)Microsoft.VisualStudio.QualityTools.UnitTestFramework.dll"/>
+    <Delete Files="$(OutDir)Microsoft.VisualStudio.QualityTools.UnitTestFramework.dll" />
+  </Target>
+</Project>
