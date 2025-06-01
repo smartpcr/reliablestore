@@ -31,17 +31,28 @@ dotnet test src/Common.Tx.Tests/Common.Tx.Tests.csproj
 
 ## Architecture Overview
 
-ReliableStore is a .NET 8.0/9.0 solution providing reliable data storage and transaction management capabilities. The solution consists of two main components:
+ReliableStore is a .NET 9.0 distributed transaction management solution with microservices demonstrating transactional consistency. The solution includes:
 
+### Core Libraries
 1. **Common.Persistence** - Core data persistence library providing abstractions and implementations for reliable data storage
-2. **Common.Tx** - Transaction management library for coordinating transactions, potentially including distributed transaction support
+2. **Common.Tx** - Transaction management library for coordinating transactions, including distributed transaction support
+3. **ReliableStore** - File-based repository implementation with transactional support
+
+### Microservices (Proof of Concept)
+All services use modern ASP.NET Core hosting with Microsoft.Extensions.Hosting:
+- **CatalogService** (Port 9001) - Product catalog APIs
+- **CustomerService** (Port 9002) - Customer management APIs  
+- **OrderService** (Port 9003) - Order orchestration and transaction coordination
+- **PaymentService** (Port 9004) - Payment processing APIs
+- **ShippingService** (Port 9005) - Shipping management APIs
 
 ### Key Technical Details
 
-- **Target Frameworks**: .NET 8.0 (default), some projects target .NET 9.0
+- **Target Framework**: .NET 9.0 (globally configured)
 - **C# Version**: 10.0
 - **Nullable Reference Types**: Enabled across all projects
 - **Assembly Naming**: All assemblies prefixed with "CRP."
+- **Web Framework**: ASP.NET Core with Microsoft.Extensions.Hosting (migrated from OWIN)
 - **Testing Framework**: xUnit with FluentAssertions for readable assertions
 - **BDD Testing**: Reqnroll (SpecFlow alternative) available for behavior-driven tests
 - **Version Management**: Nerdbank.GitVersioning for automatic semantic versioning

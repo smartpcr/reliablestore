@@ -1,16 +1,16 @@
-using System.Collections.Generic;
-using System.Web.Http;
+using Microsoft.AspNetCore.Mvc;
 using ReliableStore;
 
 namespace CatalogService
 {
-    [RoutePrefix("api/catalog")]
-    public class CatalogController : ApiController
+    [ApiController]
+    [Route("api/[controller]")]
+    public class CatalogController : ControllerBase
     {
         private static readonly FileRepository<Product> _repo = new FileRepository<Product>("catalog.json");
 
-        [HttpPost, Route("add")]
-        public IHttpActionResult Add(Product product)
+        [HttpPost("add")]
+        public IActionResult Add([FromBody] Product product)
         {
             using (var tx = new TransactionScope())
             {

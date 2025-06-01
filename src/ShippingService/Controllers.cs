@@ -1,15 +1,16 @@
-using System.Web.Http;
+using Microsoft.AspNetCore.Mvc;
 using ReliableStore;
 
 namespace ShippingService
 {
-    [RoutePrefix("api/shipping")]
-    public class ShippingController : ApiController
+    [ApiController]
+    [Route("api/[controller]")]
+    public class ShippingController : ControllerBase
     {
         private static readonly FileRepository<Shipment> _repo = new FileRepository<Shipment>("shipments.json");
 
-        [HttpPost, Route("ship")]
-        public IHttpActionResult Ship(Shipment shipment)
+        [HttpPost("ship")]
+        public IActionResult Ship([FromBody] Shipment shipment)
         {
             using (var tx = new TransactionScope())
             {

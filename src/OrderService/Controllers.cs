@@ -1,15 +1,16 @@
-using System.Web.Http;
+using Microsoft.AspNetCore.Mvc;
 using ReliableStore;
 
 namespace OrderService
 {
-    [RoutePrefix("api/order")]
-    public class OrderController : ApiController
+    [ApiController]
+    [Route("api/[controller]")]
+    public class OrderController : ControllerBase
     {
         private static readonly FileRepository<Order> _repo = new FileRepository<Order>("orders.json");
 
-        [HttpPost, Route("create")]
-        public IHttpActionResult Create(Order order)
+        [HttpPost("create")]
+        public IActionResult Create([FromBody] Order order)
         {
             using (var tx = new TransactionScope())
             {

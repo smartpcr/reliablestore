@@ -1,19 +1,20 @@
 using System;
-using System.Web.Http;
+using Microsoft.AspNetCore.Mvc;
 using ReliableStore;
 
 namespace OrderService
 {
-    [RoutePrefix("api/process")]
-    public class ProcessController : ApiController
+    [ApiController]
+    [Route("api/[controller]")]
+    public class ProcessController : ControllerBase
     {
         private static readonly FileRepository<Order> _orders = new FileRepository<Order>("orders.json");
         private static readonly FileRepository<Product> _products = new FileRepository<Product>("../CatalogService/catalog.json");
         private static readonly FileRepository<Payment> _payments = new FileRepository<Payment>("../PaymentService/payments.json");
         private static readonly FileRepository<Shipment> _shipments = new FileRepository<Shipment>("../ShippingService/shipments.json");
 
-        [HttpPost, Route("place-order")]
-        public IHttpActionResult PlaceOrder(Order order)
+        [HttpPost("place-order")]
+        public IActionResult PlaceOrder([FromBody] Order order)
         {
             using (var dt = new DistributedTransaction())
             {

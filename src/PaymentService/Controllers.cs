@@ -1,15 +1,16 @@
-using System.Web.Http;
+using Microsoft.AspNetCore.Mvc;
 using ReliableStore;
 
 namespace PaymentService
 {
-    [RoutePrefix("api/payment")]
-    public class PaymentController : ApiController
+    [ApiController]
+    [Route("api/[controller]")]
+    public class PaymentController : ControllerBase
     {
         private static readonly FileRepository<Payment> _repo = new FileRepository<Payment>("payments.json");
 
-        [HttpPost, Route("charge")]
-        public IHttpActionResult Charge(Payment payment)
+        [HttpPost("charge")]
+        public IActionResult Charge([FromBody] Payment payment)
         {
             using (var tx = new TransactionScope())
             {

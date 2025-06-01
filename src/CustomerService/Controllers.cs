@@ -1,15 +1,16 @@
-using System.Web.Http;
+using Microsoft.AspNetCore.Mvc;
 using ReliableStore;
 
 namespace CustomerService
 {
-    [RoutePrefix("api/customer")]
-    public class CustomerController : ApiController
+    [ApiController]
+    [Route("api/[controller]")]
+    public class CustomerController : ControllerBase
     {
         private static readonly FileRepository<Customer> _repo = new FileRepository<Customer>("customers.json");
 
-        [HttpPost, Route("add")]
-        public IHttpActionResult Add(Customer customer)
+        [HttpPost("add")]
+        public IActionResult Add([FromBody] Customer customer)
         {
             using (var tx = new TransactionScope())
             {
