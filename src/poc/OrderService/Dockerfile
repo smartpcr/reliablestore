@@ -10,18 +10,18 @@ COPY Directory.Packages.props ./
 COPY global.json ./
 COPY src/Common.Persistence/Common.Persistence.csproj ./src/Common.Persistence/
 COPY src/Common.Tx/Common.Tx.csproj ./src/Common.Tx/
-COPY src/OrderService/OrderService.csproj ./src/OrderService/
+COPY src/poc/OrderService/OrderService.csproj ./src/poc/OrderService/
 
 # Restore dependencies
-RUN dotnet restore src/OrderService/OrderService.csproj
+RUN dotnet restore src/poc/OrderService/OrderService.csproj
 
 # Copy source code
 COPY src/Common.Persistence/ ./src/Common.Persistence/
 COPY src/Common.Tx/ ./src/Common.Tx/
-COPY src/OrderService/ ./src/OrderService/
+COPY src/poc/OrderService/ ./src/poc/OrderService/
 
 # Build and publish
-WORKDIR /src/src/OrderService
+WORKDIR /src/src/poc/OrderService
 RUN dotnet publish -c Release -o /app/publish --no-restore
 
 # Runtime stage

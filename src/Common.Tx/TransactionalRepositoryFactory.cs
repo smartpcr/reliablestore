@@ -14,16 +14,16 @@ namespace Common.Tx
     /// </summary>
     public class TransactionalRepositoryFactory : ITransactionalRepositoryFactory
     {
-        private readonly ILoggerFactory _loggerFactory;
+        private readonly ILoggerFactory loggerFactory;
 
         public TransactionalRepositoryFactory(ILoggerFactory loggerFactory)
         {
-            _loggerFactory = loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory));
+            this.loggerFactory = loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory));
         }
 
         public TransactionalRepository<T> CreateTransactionalRepository<T>(IRepository<T> underlyingRepository) where T : class
         {
-            var logger = _loggerFactory.CreateLogger<TransactionalRepository<T>>();
+            var logger = this.loggerFactory.CreateLogger<TransactionalRepository<T>>();
             var transaction = TransactionContext.Current;
 
             if (transaction == null)

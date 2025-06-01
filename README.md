@@ -61,7 +61,7 @@ dotnet build
 dotnet test
 
 # Start individual service
-dotnet run --project src/CatalogService
+dotnet run --project src/poc/CatalogService
 ```
 
 ## Example Usage
@@ -94,17 +94,18 @@ curl -X POST http://localhost:9003/api/process/place-order \
 ### Project Structure
 ```
 src/
-├── Common.Persistence/     # File storage and entities
-├── Common.Tx/             # Transaction management
-├── CatalogService/        # Product catalog APIs
-├── CustomerService/       # Customer management APIs
-├── OrderService/          # Order coordination and distributed transactions
-├── PaymentService/        # Payment processing APIs
-└── ShippingService/       # Shipping and tracking APIs
+├── Common.Persistence/         # File storage and entities
+├── Common.Tx/                 # Transaction management
+└── poc/                       # Proof of Concept microservices
+    ├── CatalogService/        # Product catalog APIs
+    ├── CustomerService/       # Customer management APIs
+    ├── OrderService/          # Order coordination and distributed transactions
+    ├── PaymentService/        # Payment processing APIs
+    └── ShippingService/       # Shipping and tracking APIs
 
 .github/workflows/
-├── ci-cd.yml             # Build, test, and publish
-└── docker-build.yml      # Docker image builds
+├── ci-cd.yml                  # Build, test, and publish
+└── docker-build.yml           # Docker image builds
 ```
 
 ### GitHub Actions

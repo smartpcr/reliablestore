@@ -13,16 +13,16 @@ namespace Common.Tx
     /// </summary>
     public class TransactionFactory : ITransactionFactory
     {
-        private readonly ILoggerFactory _loggerFactory;
+        private readonly ILoggerFactory loggerFactory;
 
         public TransactionFactory(ILoggerFactory loggerFactory)
         {
-            _loggerFactory = loggerFactory;
+            this.loggerFactory = loggerFactory;
         }
 
         public ITransaction CreateTransaction(TransactionOptions options = null)
         {
-            var logger = _loggerFactory.CreateLogger<TransactionCoordinator>();
+            var logger = this.loggerFactory.CreateLogger<TransactionCoordinator>();
             return new TransactionCoordinator(logger, options);
         }
 

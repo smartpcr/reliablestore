@@ -16,6 +16,7 @@ namespace Common.Tx
     {
         public IsolationLevel IsolationLevel { get; set; } = IsolationLevel.ReadCommitted;
         public TimeSpan Timeout { get; set; } = TimeSpan.FromMinutes(5);
+        public TimeSpan? ResourceOperationTimeout { get; set; } = null;
         public bool EnableSavepoints { get; set; } = true;
         public bool AutoRollbackOnDispose { get; set; } = true;
         public Dictionary<string, object> Properties { get; set; } = new Dictionary<string, object>();

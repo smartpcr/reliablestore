@@ -10,18 +10,18 @@ COPY Directory.Packages.props ./
 COPY global.json ./
 COPY src/Common.Persistence/Common.Persistence.csproj ./src/Common.Persistence/
 COPY src/Common.Tx/Common.Tx.csproj ./src/Common.Tx/
-COPY src/ShippingService/ShippingService.csproj ./src/ShippingService/
+COPY src/poc/CustomerService/CustomerService.csproj ./src/poc/CustomerService/
 
 # Restore dependencies
-RUN dotnet restore src/ShippingService/ShippingService.csproj
+RUN dotnet restore src/poc/CustomerService/CustomerService.csproj
 
 # Copy source code
 COPY src/Common.Persistence/ ./src/Common.Persistence/
 COPY src/Common.Tx/ ./src/Common.Tx/
-COPY src/ShippingService/ ./src/ShippingService/
+COPY src/poc/CustomerService/ ./src/poc/CustomerService/
 
 # Build and publish
-WORKDIR /src/src/ShippingService
+WORKDIR /src/src/poc/CustomerService
 RUN dotnet publish -c Release -o /app/publish --no-restore
 
 # Runtime stage
@@ -45,4 +45,4 @@ EXPOSE 8080
 RUN adduser --disabled-password --gecos '' appuser && chown -R appuser /app
 USER appuser
 
-ENTRYPOINT ["dotnet", "CRP.ShippingService.dll"]
+ENTRYPOINT ["dotnet", "CRP.CustomerService.dll"]

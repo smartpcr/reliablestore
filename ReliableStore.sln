@@ -32,15 +32,15 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = ".build", ".build", "{158B36
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "PoC", "PoC", "{EA991D59-541F-4E4C-BC1E-BCEBD0DD93AF}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CatalogService", "src\CatalogService\CatalogService.csproj", "{0E50E270-FFBA-4726-BDA1-98B5F099B20D}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CatalogService", "src\poc\CatalogService\CatalogService.csproj", "{0E50E270-FFBA-4726-BDA1-98B5F099B20D}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CustomerService", "src\CustomerService\CustomerService.csproj", "{4F402555-5F7A-429E-8B45-99FADFE15B52}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CustomerService", "src\poc\CustomerService\CustomerService.csproj", "{4F402555-5F7A-429E-8B45-99FADFE15B52}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OrderService", "src\OrderService\OrderService.csproj", "{DD20B46A-B24C-4F60-A603-247D553D1F9A}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OrderService", "src\poc\OrderService\OrderService.csproj", "{DD20B46A-B24C-4F60-A603-247D553D1F9A}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PaymentService", "src\PaymentService\PaymentService.csproj", "{4DCE36EB-456B-4F5A-BF30-6E72CF0C9A10}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PaymentService", "src\poc\PaymentService\PaymentService.csproj", "{4DCE36EB-456B-4F5A-BF30-6E72CF0C9A10}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ShippingService", "src\ShippingService\ShippingService.csproj", "{A0A569C1-596B-420C-B16A-40309E33EE8D}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ShippingService", "src\poc\ShippingService\ShippingService.csproj", "{A0A569C1-596B-420C-B16A-40309E33EE8D}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

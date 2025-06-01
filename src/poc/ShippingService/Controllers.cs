@@ -1,29 +1,34 @@
-using System;
-using System.Linq;
-using System.Threading.Tasks;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Logging;
-using Common.Persistence;
-using Common.Tx;
+//-------------------------------------------------------------------------------
+// <copyright file="Controllers.cs" company="Microsoft Corp.">
+//     Copyright (c) Microsoft Corp. All rights reserved.
+// </copyright>
+//-------------------------------------------------------------------------------
 
 namespace ShippingService
 {
+    using System;
+    using System.Linq;
+    using System.Threading.Tasks;
+    using Microsoft.AspNetCore.Mvc;
+    using Microsoft.Extensions.Logging;
+    using Common.Persistence;
+    using Common.Tx;
     [ApiController]
     [Route("api/[controller]")]
     public class ShippingController : ControllerBase
     {
-        private readonly FileStore<Shipment> _shipmentStore;
-        private readonly ITransactionFactory _transactionFactory;
-        private readonly ILogger<ShippingController> _logger;
+        private readonly FileStore<Shipment> shipmentStore;
+        private readonly ITransactionFactory transactionFactory;
+        private readonly ILogger<ShippingController> logger;
 
         public ShippingController(
             FileStore<Shipment> shipmentStore,
             ITransactionFactory transactionFactory,
             ILogger<ShippingController> logger)
         {
-            _shipmentStore = shipmentStore;
-            _transactionFactory = transactionFactory;
-            _logger = logger;
+            this.shipmentStore = shipmentStore;
+            this.transactionFactory = transactionFactory;
+            this.logger = logger;
         }
 
         [HttpPost("ship")]
@@ -31,9 +36,9 @@ namespace ShippingService
         {
             try
             {
-                using var transaction = _transactionFactory.CreateTransaction();
+                using var transaction = this.transactionFactory.CreateTransaction();
                 
-                transaction.EnlistResource(_shipmentStore);
+                transaction.EnlistResource(this.shipmentStore);
                 
                 // Set initial status if not provided
                 if (string.IsNullOrEmpty(shipment.Status))
@@ -47,17 +52,17 @@ namespace ShippingService
                     shipment.TrackingNumber = $"TRK{Guid.NewGuid().ToString("N")[..8].ToUpper()}";
                 }
                 
-                await _shipmentStore.SaveAsync(shipment.Id, shipment);
+                await this.shipmentStore.SaveAsync(shipment.Id, shipment);
                 
                 await transaction.CommitAsync();
                 
-                _logger.LogInformation("Shipment {ShipmentId} created for order {OrderId} with tracking {TrackingNumber}", 
+                this.logger.LogInformation("Shipment {ShipmentId} created for order {OrderId} with tracking {TrackingNumber}", 
                     shipment.Id, shipment.OrderId, shipment.TrackingNumber);
                 return Ok();
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to create shipment {ShipmentId}", shipment.Id);
+                this.logger.LogError(ex, "Failed to create shipment {ShipmentId}", shipment.Id);
                 return StatusCode(500, "Internal server error");
             }
         }
@@ -67,7 +72,7 @@ namespace ShippingService
         {
             try
             {
-                var shipment = await _shipmentStore.GetAsync(id);
+                var shipment = await this.shipmentStore.GetAsync(id);
                 if (shipment == null)
                 {
                     return NotFound();
@@ -76,7 +81,7 @@ namespace ShippingService
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to get shipment {ShipmentId}", id);
+                this.logger.LogError(ex, "Failed to get shipment {ShipmentId}", id);
                 return StatusCode(500, "Internal server error");
             }
         }
@@ -86,12 +91,12 @@ namespace ShippingService
         {
             try
             {
-                var shipments = await _shipmentStore.GetAllAsync();
+                var shipments = await this.shipmentStore.GetAllAsync();
                 return Ok(shipments);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to get all shipments");
+                this.logger.LogError(ex, "Failed to get all shipments");
                 return StatusCode(500, "Internal server error");
             }
         }
@@ -101,7 +106,7 @@ namespace ShippingService
         {
             try
             {
-                var shipments = await _shipmentStore.GetAllAsync();
+                var shipments = await this.shipmentStore.GetAllAsync();
                 var shipment = shipments.FirstOrDefault(s => s.TrackingNumber == trackingNumber);
                 
                 if (shipment == null)
@@ -112,7 +117,7 @@ namespace ShippingService
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to track shipment with tracking number {TrackingNumber}", trackingNumber);
+                this.logger.LogError(ex, "Failed to track shipment with tracking number {TrackingNumber}", trackingNumber);
                 return StatusCode(500, "Internal server error");
             }
         }
@@ -122,27 +127,27 @@ namespace ShippingService
         {
             try
             {
-                using var transaction = _transactionFactory.CreateTransaction();
+                using var transaction = this.transactionFactory.CreateTransaction();
                 
-                transaction.EnlistResource(_shipmentStore);
+                transaction.EnlistResource(this.shipmentStore);
                 
-                var shipment = await _shipmentStore.GetAsync(id);
+                var shipment = await this.shipmentStore.GetAsync(id);
                 if (shipment == null)
                 {
                     return NotFound();
                 }
 
                 shipment.Status = status;
-                await _shipmentStore.SaveAsync(id, shipment);
+                await this.shipmentStore.SaveAsync(id, shipment);
                 
                 await transaction.CommitAsync();
                 
-                _logger.LogInformation("Shipment {ShipmentId} status updated to {Status}", id, status);
+                this.logger.LogInformation("Shipment {ShipmentId} status updated to {Status}", id, status);
                 return Ok();
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to update shipment {ShipmentId} status", id);
+                this.logger.LogError(ex, "Failed to update shipment {ShipmentId} status", id);
                 return StatusCode(500, "Internal server error");
             }
         }
@@ -152,27 +157,27 @@ namespace ShippingService
         {
             try
             {
-                using var transaction = _transactionFactory.CreateTransaction();
+                using var transaction = this.transactionFactory.CreateTransaction();
                 
-                transaction.EnlistResource(_shipmentStore);
+                transaction.EnlistResource(this.shipmentStore);
                 
-                var existingShipment = await _shipmentStore.GetAsync(id);
+                var existingShipment = await this.shipmentStore.GetAsync(id);
                 if (existingShipment == null)
                 {
                     return NotFound();
                 }
 
                 shipment.Id = id; // Ensure the ID matches
-                await _shipmentStore.SaveAsync(id, shipment);
+                await this.shipmentStore.SaveAsync(id, shipment);
                 
                 await transaction.CommitAsync();
                 
-                _logger.LogInformation("Shipment {ShipmentId} updated successfully", id);
+                this.logger.LogInformation("Shipment {ShipmentId} updated successfully", id);
                 return Ok();
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to update shipment {ShipmentId}", id);
+                this.logger.LogError(ex, "Failed to update shipment {ShipmentId}", id);
                 return StatusCode(500, "Internal server error");
             }
         }
@@ -182,26 +187,26 @@ namespace ShippingService
         {
             try
             {
-                using var transaction = _transactionFactory.CreateTransaction();
+                using var transaction = this.transactionFactory.CreateTransaction();
                 
-                transaction.EnlistResource(_shipmentStore);
+                transaction.EnlistResource(this.shipmentStore);
                 
-                var existingShipment = await _shipmentStore.GetAsync(id);
+                var existingShipment = await this.shipmentStore.GetAsync(id);
                 if (existingShipment == null)
                 {
                     return NotFound();
                 }
 
-                await _shipmentStore.DeleteAsync(id);
+                await this.shipmentStore.DeleteAsync(id);
                 
                 await transaction.CommitAsync();
                 
-                _logger.LogInformation("Shipment {ShipmentId} deleted successfully", id);
+                this.logger.LogInformation("Shipment {ShipmentId} deleted successfully", id);
                 return Ok();
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to delete shipment {ShipmentId}", id);
+                this.logger.LogError(ex, "Failed to delete shipment {ShipmentId}", id);
                 return StatusCode(500, "Internal server error");
             }
         }

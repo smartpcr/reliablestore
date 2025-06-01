@@ -1,28 +1,33 @@
-using System;
-using System.Threading.Tasks;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Logging;
-using Common.Persistence;
-using Common.Tx;
+//-------------------------------------------------------------------------------
+// <copyright file="Controllers.cs" company="Microsoft Corp.">
+//     Copyright (c) Microsoft Corp. All rights reserved.
+// </copyright>
+//-------------------------------------------------------------------------------
 
 namespace PaymentService
 {
+    using System;
+    using System.Threading.Tasks;
+    using Microsoft.AspNetCore.Mvc;
+    using Microsoft.Extensions.Logging;
+    using Common.Persistence;
+    using Common.Tx;
     [ApiController]
     [Route("api/[controller]")]
     public class PaymentController : ControllerBase
     {
-        private readonly FileStore<Payment> _paymentStore;
-        private readonly ITransactionFactory _transactionFactory;
-        private readonly ILogger<PaymentController> _logger;
+        private readonly FileStore<Payment> paymentStore;
+        private readonly ITransactionFactory transactionFactory;
+        private readonly ILogger<PaymentController> logger;
 
         public PaymentController(
             FileStore<Payment> paymentStore,
             ITransactionFactory transactionFactory,
             ILogger<PaymentController> logger)
         {
-            _paymentStore = paymentStore;
-            _transactionFactory = transactionFactory;
-            _logger = logger;
+            this.paymentStore = paymentStore;
+            this.transactionFactory = transactionFactory;
+            this.logger = logger;
         }
 
         [HttpPost("charge")]
@@ -30,9 +35,9 @@ namespace PaymentService
         {
             try
             {
-                using var transaction = _transactionFactory.CreateTransaction();
+                using var transaction = this.transactionFactory.CreateTransaction();
                 
-                transaction.EnlistResource(_paymentStore);
+                transaction.EnlistResource(this.paymentStore);
                 
                 // Set initial status if not provided
                 if (string.IsNullOrEmpty(payment.Status))
@@ -40,16 +45,16 @@ namespace PaymentService
                     payment.Status = "Processing";
                 }
                 
-                await _paymentStore.SaveAsync(payment.Id, payment);
+                await this.paymentStore.SaveAsync(payment.Id, payment);
                 
                 await transaction.CommitAsync();
                 
-                _logger.LogInformation("Payment {PaymentId} charged successfully for order {OrderId}", payment.Id, payment.OrderId);
+                this.logger.LogInformation("Payment {PaymentId} charged successfully for order {OrderId}", payment.Id, payment.OrderId);
                 return Ok();
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to charge payment {PaymentId}", payment.Id);
+                this.logger.LogError(ex, "Failed to charge payment {PaymentId}", payment.Id);
                 return StatusCode(500, "Internal server error");
             }
         }
@@ -59,7 +64,7 @@ namespace PaymentService
         {
             try
             {
-                var payment = await _paymentStore.GetAsync(id);
+                var payment = await this.paymentStore.GetAsync(id);
                 if (payment == null)
                 {
                     return NotFound();
@@ -68,7 +73,7 @@ namespace PaymentService
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to get payment {PaymentId}", id);
+                this.logger.LogError(ex, "Failed to get payment {PaymentId}", id);
                 return StatusCode(500, "Internal server error");
             }
         }
@@ -78,12 +83,12 @@ namespace PaymentService
         {
             try
             {
-                var payments = await _paymentStore.GetAllAsync();
+                var payments = await this.paymentStore.GetAllAsync();
                 return Ok(payments);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to get all payments");
+                this.logger.LogError(ex, "Failed to get all payments");
                 return StatusCode(500, "Internal server error");
             }
         }
@@ -93,27 +98,27 @@ namespace PaymentService
         {
             try
             {
-                using var transaction = _transactionFactory.CreateTransaction();
+                using var transaction = this.transactionFactory.CreateTransaction();
                 
-                transaction.EnlistResource(_paymentStore);
+                transaction.EnlistResource(this.paymentStore);
                 
-                var payment = await _paymentStore.GetAsync(id);
+                var payment = await this.paymentStore.GetAsync(id);
                 if (payment == null)
                 {
                     return NotFound();
                 }
 
                 payment.Status = status;
-                await _paymentStore.SaveAsync(id, payment);
+                await this.paymentStore.SaveAsync(id, payment);
                 
                 await transaction.CommitAsync();
                 
-                _logger.LogInformation("Payment {PaymentId} status updated to {Status}", id, status);
+                this.logger.LogInformation("Payment {PaymentId} status updated to {Status}", id, status);
                 return Ok();
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to update payment {PaymentId} status", id);
+                this.logger.LogError(ex, "Failed to update payment {PaymentId} status", id);
                 return StatusCode(500, "Internal server error");
             }
         }
@@ -123,24 +128,24 @@ namespace PaymentService
         {
             try
             {
-                using var transaction = _transactionFactory.CreateTransaction();
+                using var transaction = this.transactionFactory.CreateTransaction();
                 
-                transaction.EnlistResource(_paymentStore);
+                transaction.EnlistResource(this.paymentStore);
                 
                 // Create a refund payment record
                 refundPayment.Status = "Refunded";
                 refundPayment.Amount = -Math.Abs(refundPayment.Amount); // Negative amount for refund
                 
-                await _paymentStore.SaveAsync(refundPayment.Id, refundPayment);
+                await this.paymentStore.SaveAsync(refundPayment.Id, refundPayment);
                 
                 await transaction.CommitAsync();
                 
-                _logger.LogInformation("Refund {PaymentId} processed successfully for order {OrderId}", refundPayment.Id, refundPayment.OrderId);
+                this.logger.LogInformation("Refund {PaymentId} processed successfully for order {OrderId}", refundPayment.Id, refundPayment.OrderId);
                 return Ok();
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to process refund {PaymentId}", refundPayment.Id);
+                this.logger.LogError(ex, "Failed to process refund {PaymentId}", refundPayment.Id);
                 return StatusCode(500, "Internal server error");
             }
         }
@@ -150,26 +155,26 @@ namespace PaymentService
         {
             try
             {
-                using var transaction = _transactionFactory.CreateTransaction();
+                using var transaction = this.transactionFactory.CreateTransaction();
                 
-                transaction.EnlistResource(_paymentStore);
+                transaction.EnlistResource(this.paymentStore);
                 
-                var existingPayment = await _paymentStore.GetAsync(id);
+                var existingPayment = await this.paymentStore.GetAsync(id);
                 if (existingPayment == null)
                 {
                     return NotFound();
                 }
 
-                await _paymentStore.DeleteAsync(id);
+                await this.paymentStore.DeleteAsync(id);
                 
                 await transaction.CommitAsync();
                 
-                _logger.LogInformation("Payment {PaymentId} deleted successfully", id);
+                this.logger.LogInformation("Payment {PaymentId} deleted successfully", id);
                 return Ok();
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to delete payment {PaymentId}", id);
+                this.logger.LogError(ex, "Failed to delete payment {PaymentId}", id);
                 return StatusCode(500, "Internal server error");
             }
         }

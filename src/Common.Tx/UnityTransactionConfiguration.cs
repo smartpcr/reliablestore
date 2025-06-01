@@ -64,19 +64,19 @@ namespace Common.Tx
     /// </summary>
     internal class TransactionFactoryWithDefaults : ITransactionFactory
     {
-        private readonly ILoggerFactory _loggerFactory;
-        private readonly TransactionOptions _defaultOptions;
+        private readonly ILoggerFactory loggerFactory;
+        private readonly TransactionOptions defaultOptions;
 
         public TransactionFactoryWithDefaults(ILoggerFactory loggerFactory, TransactionOptions defaultOptions = null)
         {
-            _loggerFactory = loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory));
-            _defaultOptions = defaultOptions ?? new TransactionOptions();
+            this.loggerFactory = loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory));
+            this.defaultOptions = defaultOptions ?? new TransactionOptions();
         }
 
         public ITransaction CreateTransaction(TransactionOptions options = null)
         {
-            var effectiveOptions = options ?? _defaultOptions;
-            var logger = _loggerFactory.CreateLogger<TransactionCoordinator>();
+            var effectiveOptions = options ?? defaultOptions;
+            var logger = loggerFactory.CreateLogger<TransactionCoordinator>();
             return new TransactionCoordinator(logger, effectiveOptions);
         }
 

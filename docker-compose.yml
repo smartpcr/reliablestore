@@ -4,7 +4,7 @@ services:
   catalog-service:
     build:
       context: .
-      dockerfile: src/CatalogService/Dockerfile
+      dockerfile: src/poc/CatalogService/Dockerfile
     ports:
       - "9001:8080"
     environment:
@@ -19,7 +19,7 @@ services:
   customer-service:
     build:
       context: .
-      dockerfile: src/CustomerService/Dockerfile
+      dockerfile: src/poc/CustomerService/Dockerfile
     ports:
       - "9002:8080"
     environment:
@@ -34,7 +34,7 @@ services:
   order-service:
     build:
       context: .
-      dockerfile: src/OrderService/Dockerfile
+      dockerfile: src/poc/OrderService/Dockerfile
     ports:
       - "9003:8080"
     environment:
@@ -55,7 +55,7 @@ services:
   payment-service:
     build:
       context: .
-      dockerfile: src/PaymentService/Dockerfile
+      dockerfile: src/poc/PaymentService/Dockerfile
     ports:
       - "9004:8080"
     environment:
@@ -70,7 +70,7 @@ services:
   shipping-service:
     build:
       context: .
-      dockerfile: src/ShippingService/Dockerfile
+      dockerfile: src/poc/ShippingService/Dockerfile
     ports:
       - "9005:8080"
     environment:

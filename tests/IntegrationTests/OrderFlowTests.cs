@@ -1,10 +1,15 @@
-using System.Net.Http;
-using System.Text;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
-using Newtonsoft.Json;
+//-------------------------------------------------------------------------------
+// <copyright file="OrderFlowTests.cs" company="Microsoft Corp.">
+//     Copyright (c) Microsoft Corp. All rights reserved.
+// </copyright>
+//-------------------------------------------------------------------------------
 
 namespace IntegrationTests
 {
+    using System.Net.Http;
+    using System.Text;
+    using Microsoft.VisualStudio.TestTools.UnitTesting;
+    using Newtonsoft.Json;
     [TestClass]
     public class OrderFlowTests
     {

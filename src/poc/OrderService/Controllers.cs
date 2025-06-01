@@ -1,28 +1,33 @@
-using System;
-using System.Threading.Tasks;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Logging;
-using Common.Persistence;
-using Common.Tx;
+//-------------------------------------------------------------------------------
+// <copyright file="Controllers.cs" company="Microsoft Corp.">
+//     Copyright (c) Microsoft Corp. All rights reserved.
+// </copyright>
+//-------------------------------------------------------------------------------
 
 namespace OrderService
 {
+    using System;
+    using System.Threading.Tasks;
+    using Microsoft.AspNetCore.Mvc;
+    using Microsoft.Extensions.Logging;
+    using Common.Persistence;
+    using Common.Tx;
     [ApiController]
     [Route("api/[controller]")]
     public class OrderController : ControllerBase
     {
-        private readonly FileStore<Order> _orderStore;
-        private readonly ITransactionFactory _transactionFactory;
-        private readonly ILogger<OrderController> _logger;
+        private readonly FileStore<Order> orderStore;
+        private readonly ITransactionFactory transactionFactory;
+        private readonly ILogger<OrderController> logger;
 
         public OrderController(
             FileStore<Order> orderStore,
             ITransactionFactory transactionFactory,
             ILogger<OrderController> logger)
         {
-            _orderStore = orderStore;
-            _transactionFactory = transactionFactory;
-            _logger = logger;
+            this.orderStore = orderStore;
+            this.transactionFactory = transactionFactory;
+            this.logger = logger;
         }
 
         [HttpPost("create")]
@@ -30,20 +35,20 @@ namespace OrderService
         {
             try
             {
-                using var transaction = _transactionFactory.CreateTransaction();
+                using var transaction = this.transactionFactory.CreateTransaction();
                 
-                transaction.EnlistResource(_orderStore);
+                transaction.EnlistResource(this.orderStore);
                 
-                await _orderStore.SaveAsync(order.Id, order);
+                await this.orderStore.SaveAsync(order.Id, order);
                 
                 await transaction.CommitAsync();
                 
-                _logger.LogInformation("Order {OrderId} created successfully", order.Id);
+                this.logger.LogInformation("Order {OrderId} created successfully", order.Id);
                 return Ok();
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to create order {OrderId}", order.Id);
+                this.logger.LogError(ex, "Failed to create order {OrderId}", order.Id);
                 return StatusCode(500, "Internal server error");
             }
         }
@@ -53,7 +58,7 @@ namespace OrderService
         {
             try
             {
-                var order = await _orderStore.GetAsync(id);
+                var order = await this.orderStore.GetAsync(id);
                 if (order == null)
                 {
                     return NotFound();
@@ -62,7 +67,7 @@ namespace OrderService
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to get order {OrderId}", id);
+                this.logger.LogError(ex, "Failed to get order {OrderId}", id);
                 return StatusCode(500, "Internal server error");
             }
         }
@@ -72,12 +77,12 @@ namespace OrderService
         {
             try
             {
-                var orders = await _orderStore.GetAllAsync();
+                var orders = await this.orderStore.GetAllAsync();
                 return Ok(orders);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to get all orders");
+                this.logger.LogError(ex, "Failed to get all orders");
                 return StatusCode(500, "Internal server error");
             }
         }
@@ -87,27 +92,27 @@ namespace OrderService
         {
             try
             {
-                using var transaction = _transactionFactory.CreateTransaction();
+                using var transaction = this.transactionFactory.CreateTransaction();
                 
-                transaction.EnlistResource(_orderStore);
+                transaction.EnlistResource(this.orderStore);
                 
-                var existingOrder = await _orderStore.GetAsync(id);
+                var existingOrder = await this.orderStore.GetAsync(id);
                 if (existingOrder == null)
                 {
                     return NotFound();
                 }
 
                 order.Id = id; // Ensure the ID matches
-                await _orderStore.SaveAsync(id, order);
+                await this.orderStore.SaveAsync(id, order);
                 
                 await transaction.CommitAsync();
                 
-                _logger.LogInformation("Order {OrderId} updated successfully", id);
+                this.logger.LogInformation("Order {OrderId} updated successfully", id);
                 return Ok();
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to update order {OrderId}", id);
+                this.logger.LogError(ex, "Failed to update order {OrderId}", id);
                 return StatusCode(500, "Internal server error");
             }
         }
@@ -117,27 +122,27 @@ namespace OrderService
         {
             try
             {
-                using var transaction = _transactionFactory.CreateTransaction();
+                using var transaction = this.transactionFactory.CreateTransaction();
                 
-                transaction.EnlistResource(_orderStore);
+                transaction.EnlistResource(this.orderStore);
                 
-                var order = await _orderStore.GetAsync(id);
+                var order = await this.orderStore.GetAsync(id);
                 if (order == null)
                 {
                     return NotFound();
                 }
 
                 order.Status = status;
-                await _orderStore.SaveAsync(id, order);
+                await this.orderStore.SaveAsync(id, order);
                 
                 await transaction.CommitAsync();
                 
-                _logger.LogInformation("Order {OrderId} status updated to {Status}", id, status);
+                this.logger.LogInformation("Order {OrderId} status updated to {Status}", id, status);
                 return Ok();
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to update order {OrderId} status", id);
+                this.logger.LogError(ex, "Failed to update order {OrderId} status", id);
                 return StatusCode(500, "Internal server error");
             }
         }
@@ -147,26 +152,26 @@ namespace OrderService
         {
             try
             {
-                using var transaction = _transactionFactory.CreateTransaction();
+                using var transaction = this.transactionFactory.CreateTransaction();
                 
-                transaction.EnlistResource(_orderStore);
+                transaction.EnlistResource(this.orderStore);
                 
-                var existingOrder = await _orderStore.GetAsync(id);
+                var existingOrder = await this.orderStore.GetAsync(id);
                 if (existingOrder == null)
                 {
                     return NotFound();
                 }
 
-                await _orderStore.DeleteAsync(id);
+                await this.orderStore.DeleteAsync(id);
                 
                 await transaction.CommitAsync();
                 
-                _logger.LogInformation("Order {OrderId} deleted successfully", id);
+                this.logger.LogInformation("Order {OrderId} deleted successfully", id);
                 return Ok();
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to delete order {OrderId}", id);
+                this.logger.LogError(ex, "Failed to delete order {OrderId}", id);
                 return StatusCode(500, "Internal server error");
             }
         }

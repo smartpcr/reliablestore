@@ -19,21 +19,21 @@ namespace Common.Tx
     /// </summary>
     public class TransactionalRepository<T> : ITransactionalResource where T : class
     {
-        private readonly IRepository<T> _underlyingRepository;
-        private readonly ILogger<TransactionalRepository<T>> _logger;
-        private readonly ConcurrentDictionary<string, TransactionOperation<T>> _pendingOperations;
-        private readonly ConcurrentDictionary<string, Dictionary<string, TransactionOperation<T>>> _savepoints;
-        private readonly object _operationLock = new object();
+        private readonly IRepository<T> underlyingRepository;
+        private readonly ILogger<TransactionalRepository<T>> logger;
+        private readonly ConcurrentDictionary<string, TransactionOperation<T>> pendingOperations;
+        private readonly ConcurrentDictionary<string, Dictionary<string, TransactionOperation<T>>> savepoints;
+        private readonly object operationLock = new object();
 
         public string ResourceId { get; }
 
         public TransactionalRepository(IRepository<T> underlyingRepository, ILogger<TransactionalRepository<T>> logger)
         {
-            _underlyingRepository = underlyingRepository ?? throw new ArgumentNullException(nameof(underlyingRepository));
-            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-            _pendingOperations = new ConcurrentDictionary<string, TransactionOperation<T>>();
-            _savepoints = new ConcurrentDictionary<string, Dictionary<string, TransactionOperation<T>>>();
-            ResourceId = $"Repository_{typeof(T).Name}_{Guid.NewGuid():N}";
+            this.underlyingRepository = underlyingRepository ?? throw new ArgumentNullException(nameof(underlyingRepository));
+            this.logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            this.pendingOperations = new ConcurrentDictionary<string, TransactionOperation<T>>();
+            this.savepoints = new ConcurrentDictionary<string, Dictionary<string, TransactionOperation<T>>>();
+            this.ResourceId = $"Repository_{typeof(T).Name}_{Guid.NewGuid():N}";
         }
 
         /// <summary>
@@ -42,7 +42,7 @@ namespace Common.Tx
         public async Task<T> GetAsync(ITransaction transaction, string key, CancellationToken cancellationToken = default)
         {
             // Check for pending operations in this transaction first
-            if (_pendingOperations.TryGetValue(key, out var operation) && operation.TransactionId == transaction.TransactionId)
+            if (this.pendingOperations.TryGetValue(key, out var operation) && operation.TransactionId == transaction.TransactionId)
             {
                 switch (operation.Type)
                 {
@@ -57,10 +57,10 @@ namespace Common.Tx
             }
 
             // Read from underlying repository
-            var entity = await _underlyingRepository.GetAsync(key, cancellationToken);
+            var entity = await this.underlyingRepository.GetAsync(key, cancellationToken);
 
             // Track read operation for isolation
-            TrackOperation(transaction.TransactionId, key, OperationType.Read, entity, entity);
+            this.TrackOperation(transaction.TransactionId, key, OperationType.Read, entity, entity);
 
             return entity;
         }
@@ -74,13 +74,13 @@ namespace Common.Tx
                 throw new ArgumentNullException(nameof(entity));
 
             // Get original value for rollback
-            var originalValue = await _underlyingRepository.GetAsync(key, cancellationToken);
+            var originalValue = await this.underlyingRepository.GetAsync(key, cancellationToken);
             var operationType = originalValue == null ? OperationType.Insert : OperationType.Update;
 
             // Track operation for commit/rollback
-            TrackOperation(transaction.TransactionId, key, operationType, originalValue, entity);
+            this.TrackOperation(transaction.TransactionId, key, operationType, originalValue, entity);
 
-            _logger.LogDebug("Tracked {OperationType} operation for key {Key} in transaction {TransactionId}",
+            this.logger.LogDebug("Tracked {OperationType} operation for key {Key} in transaction {TransactionId}",
                 operationType, key, transaction.TransactionId);
 
             return entity;
@@ -92,16 +92,16 @@ namespace Common.Tx
         public async Task<bool> DeleteAsync(ITransaction transaction, string key, CancellationToken cancellationToken = default)
         {
             // Get original value for rollback
-            var originalValue = await _underlyingRepository.GetAsync(key, cancellationToken);
+            var originalValue = await this.underlyingRepository.GetAsync(key, cancellationToken);
             if (originalValue == null)
             {
                 return false; // Nothing to delete
             }
 
             // Track delete operation
-            TrackOperation(transaction.TransactionId, key, OperationType.Delete, originalValue, null);
+            this.TrackOperation(transaction.TransactionId, key, OperationType.Delete, originalValue, null);
 
-            _logger.LogDebug("Tracked Delete operation for key {Key} in transaction {TransactionId}",
+            this.logger.LogDebug("Tracked Delete operation for key {Key} in transaction {TransactionId}",
                 key, transaction.TransactionId);
 
             return true;
@@ -112,7 +112,7 @@ namespace Common.Tx
         /// </summary>
         public async Task<bool> ExistsAsync(ITransaction transaction, string key, CancellationToken cancellationToken = default)
         {
-            var entity = await GetAsync(transaction, key, cancellationToken);
+            var entity = await this.GetAsync(transaction, key, cancellationToken);
             return entity != null;
         }
 
@@ -122,12 +122,12 @@ namespace Common.Tx
         public async Task<IEnumerable<T>> GetAllAsync(ITransaction transaction, Func<T, bool> predicate = null, CancellationToken cancellationToken = default)
         {
             // Get all from underlying repository
-            var allUnderlyingEntities = await _underlyingRepository.GetAllAsync(null, cancellationToken); // Get all, then filter in memory
-            var entityDict = allUnderlyingEntities.ToDictionary(GetEntityKey, e => e);
+            var allUnderlyingEntities = await this.underlyingRepository.GetAllAsync(null, cancellationToken); // Get all, then filter in memory
+            var entityDict = allUnderlyingEntities.ToDictionary(this.GetEntityKey, e => e);
 
             // Apply transaction operations from the current transaction
             // Considering only operations for the current transaction
-            var transactionOperations = _pendingOperations.Values
+            var transactionOperations = this.pendingOperations.Values
                 .Where(op => op.TransactionId == transaction.TransactionId)
                 .ToList();
 
@@ -156,7 +156,7 @@ namespace Common.Tx
 
         private void TrackOperation(string transactionId, string key, OperationType type, T originalValue, T newValue)
         {
-            lock (_operationLock)
+            lock (this.operationLock)
             {
                 var operation = new TransactionOperation<T>
                 {
@@ -168,7 +168,7 @@ namespace Common.Tx
                     Timestamp = DateTime.UtcNow
                 };
 
-                _pendingOperations.AddOrUpdate(key, operation, (k, existing) =>
+                this.pendingOperations.AddOrUpdate(key, operation, (k, existing) =>
                 {
                     // If this is a new transaction operation, keep the original value from the first operation
                     if (existing.TransactionId == transactionId)
@@ -201,7 +201,7 @@ namespace Common.Tx
 
             // Fallback: use the entity's hash code as a string key
             // This ensures the method always returns a key, even for entities without conventional key properties
-            _logger.LogWarning("Entity type {EntityType} does not have a conventional key property (Id, ID, Key, key). Using hash code as key.", typeof(T).Name);
+            this.logger.LogWarning("Entity type {EntityType} does not have a conventional key property (Id, ID, Key, key). Using hash code as key.", typeof(T).Name);
             return entity.GetHashCode().ToString();
         }
 
@@ -211,19 +211,19 @@ namespace Common.Tx
         {
             try
             {
-                var operations = _pendingOperations.Values
+                var operations = this.pendingOperations.Values
                     .Where(op => op.TransactionId == transaction.TransactionId)
                     .ToList();
 
-                _logger.LogDebug("Preparing {OperationCount} operations for transaction {TransactionId}",
+                this.logger.LogDebug("Preparing {OperationCount} operations for transaction {TransactionId}",
                     operations.Count, transaction.TransactionId);
 
                 // Validate all operations can be applied
                 foreach (var operation in operations)
                 {
-                    if (!await ValidateOperationAsync(operation, cancellationToken))
+                    if (!await this.ValidateOperationAsync(operation, cancellationToken))
                     {
-                        _logger.LogWarning("Operation validation failed for key {Key} in transaction {TransactionId}",
+                        this.logger.LogWarning("Operation validation failed for key {Key} in transaction {TransactionId}",
                             operation.Key, transaction.TransactionId);
                         return false;
                     }
@@ -233,19 +233,19 @@ namespace Common.Tx
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to prepare repository for transaction {TransactionId}", transaction.TransactionId);
+                this.logger.LogError(ex, "Failed to prepare repository for transaction {TransactionId}", transaction.TransactionId);
                 return false;
             }
         }
 
         public async Task CommitAsync(ITransaction transaction, CancellationToken cancellationToken = default)
         {
-            var operations = _pendingOperations.Values
+            var operations = this.pendingOperations.Values
                 .Where(op => op.TransactionId == transaction.TransactionId)
                 .OrderBy(op => op.Timestamp)
                 .ToList();
 
-            _logger.LogInformation("Committing {OperationCount} operations for transaction {TransactionId}",
+            this.logger.LogInformation("Committing {OperationCount} operations for transaction {TransactionId}",
                 operations.Count, transaction.TransactionId);
 
             try
@@ -253,35 +253,35 @@ namespace Common.Tx
                 // Apply all operations to underlying repository
                 foreach (var operation in operations)
                 {
-                    await ApplyOperationAsync(operation, cancellationToken);
+                    await this.ApplyOperationAsync(operation, cancellationToken);
                 }
 
                 // Clean up transaction operations
-                CleanupTransactionOperations(transaction.TransactionId);
+                this.CleanupTransactionOperations(transaction.TransactionId);
 
-                _logger.LogDebug("Successfully committed all operations for transaction {TransactionId}", transaction.TransactionId);
+                this.logger.LogDebug("Successfully committed all operations for transaction {TransactionId}", transaction.TransactionId);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to commit operations for transaction {TransactionId}", transaction.TransactionId);
+                this.logger.LogError(ex, "Failed to commit operations for transaction {TransactionId}", transaction.TransactionId);
                 throw;
             }
         }
 
         public async Task RollbackAsync(ITransaction transaction, CancellationToken cancellationToken = default)
         {
-            var operations = _pendingOperations.Values
+            var operations = this.pendingOperations.Values
                 .Where(op => op.TransactionId == transaction.TransactionId)
                 .ToList();
 
-            _logger.LogInformation("Rolling back {OperationCount} operations for transaction {TransactionId} on resource {ResourceId}",
-                operations.Count, transaction.TransactionId, ResourceId);
+            this.logger.LogInformation("Rolling back {OperationCount} operations for transaction {TransactionId} on resource {ResourceId}",
+                operations.Count, transaction.TransactionId, this.ResourceId);
 
             // Clean up transaction operations (no need to apply them to underlying store)
-            CleanupTransactionOperations(transaction.TransactionId);
+            this.CleanupTransactionOperations(transaction.TransactionId);
 
-            _logger.LogDebug("Successfully rolled back all operations for transaction {TransactionId} on resource {ResourceId}",
-                transaction.TransactionId, ResourceId);
+            this.logger.LogDebug("Successfully rolled back all operations for transaction {TransactionId} on resource {ResourceId}",
+                transaction.TransactionId, this.ResourceId);
             await Task.CompletedTask;
         }
 
@@ -290,14 +290,14 @@ namespace Common.Tx
             var savepointKey = $"{transaction.TransactionId}_{savepoint.Name}";
 
             // Create a snapshot of current pending operations for this transaction
-            var currentOperationsSnapshot = _pendingOperations.Values
+            var currentOperationsSnapshot = this.pendingOperations.Values
                 .Where(op => op.TransactionId == transaction.TransactionId)
                 .ToDictionary(op => op.Key, op => op.Clone()); // Clone operations to prevent modification issues
 
-            _savepoints.AddOrUpdate(savepointKey, currentOperationsSnapshot, (key, existing) => currentOperationsSnapshot);
+            this.savepoints.AddOrUpdate(savepointKey, currentOperationsSnapshot, (key, existing) => currentOperationsSnapshot);
 
-            _logger.LogDebug("Created savepoint {SavepointName} for transaction {TransactionId} on resource {ResourceId} with {OperationCount} operations snapshot",
-                savepoint.Name, transaction.TransactionId, ResourceId, currentOperationsSnapshot.Count);
+            this.logger.LogDebug("Created savepoint {SavepointName} for transaction {TransactionId} on resource {ResourceId} with {OperationCount} operations snapshot",
+                savepoint.Name, transaction.TransactionId, this.ResourceId, currentOperationsSnapshot.Count);
 
             return Task.CompletedTask;
         }
@@ -306,34 +306,34 @@ namespace Common.Tx
         {
             var savepointKey = $"{transaction.TransactionId}_{savepoint.Name}";
 
-            if (_savepoints.TryGetValue(savepointKey, out var savepointOperationSnapshot))
+            if (this.savepoints.TryGetValue(savepointKey, out var savepointOperationSnapshot))
             {
-                _logger.LogInformation("Rolling back resource {ResourceId} to savepoint {SavepointName} in transaction {TransactionId}",
-                    ResourceId, savepoint.Name, transaction.TransactionId);
+                this.logger.LogInformation("Rolling back resource {ResourceId} to savepoint {SavepointName} in transaction {TransactionId}",
+                    this.ResourceId, savepoint.Name, transaction.TransactionId);
 
-                var keysForCurrentTx = _pendingOperations
+                var keysForCurrentTx = this.pendingOperations
                     .Where(kvp => kvp.Value.TransactionId == transaction.TransactionId)
                     .Select(kvp => kvp.Key)
                     .ToList();
 
                 foreach (var key in keysForCurrentTx)
                 {
-                    _pendingOperations.TryRemove(key, out _);
+                    this.pendingOperations.TryRemove(key, out _);
                 }
 
                 foreach (var savedOperationEntry in savepointOperationSnapshot)
                 {
-                    _pendingOperations.AddOrUpdate(savedOperationEntry.Key, savedOperationEntry.Value.Clone(), (k, existing) => savedOperationEntry.Value.Clone());
+                    this.pendingOperations.AddOrUpdate(savedOperationEntry.Key, savedOperationEntry.Value.Clone(), (k, existing) => savedOperationEntry.Value.Clone());
                 }
 
                 // The TransactionCoordinator is responsible for identifying and instructing to discard future savepoint data.
-                _logger.LogDebug("Successfully rolled back resource {ResourceId} to savepoint {SavepointName} in transaction {TransactionId}",
-                    ResourceId, savepoint.Name, transaction.TransactionId);
+                this.logger.LogDebug("Successfully rolled back resource {ResourceId} to savepoint {SavepointName} in transaction {TransactionId}",
+                    this.ResourceId, savepoint.Name, transaction.TransactionId);
             }
             else
             {
-                _logger.LogWarning("Savepoint {SavepointName} not found for transaction {TransactionId} on resource {ResourceId}. Cannot rollback to savepoint.",
-                    savepoint.Name, transaction.TransactionId, ResourceId);
+                this.logger.LogWarning("Savepoint {SavepointName} not found for transaction {TransactionId} on resource {ResourceId}. Cannot rollback to savepoint.",
+                    savepoint.Name, transaction.TransactionId, this.ResourceId);
                 // Consider throwing: throw new InvalidOperationException($"Savepoint {savepoint.Name} not found for transaction {transaction.TransactionId} on resource {ResourceId}.");
             }
 
@@ -343,15 +343,15 @@ namespace Common.Tx
         public Task DiscardSavepointDataAsync(ITransaction transaction, ISavepoint savepointToDiscard, CancellationToken cancellationToken = default)
         {
             var savepointKey = $"{transaction.TransactionId}_{savepointToDiscard.Name}";
-            if (_savepoints.TryRemove(savepointKey, out _))
+            if (this.savepoints.TryRemove(savepointKey, out _))
             {
-                _logger.LogDebug("Discarded savepoint data for {SavepointName} in transaction {TransactionId} on resource {ResourceId}",
-                    savepointToDiscard.Name, transaction.TransactionId, ResourceId);
+                this.logger.LogDebug("Discarded savepoint data for {SavepointName} in transaction {TransactionId} on resource {ResourceId}",
+                    savepointToDiscard.Name, transaction.TransactionId, this.ResourceId);
             }
             else
             {
-                _logger.LogDebug("No savepoint data found to discard for {SavepointName} in transaction {TransactionId} on resource {ResourceId}",
-                    savepointToDiscard.Name, transaction.TransactionId, ResourceId);
+                this.logger.LogDebug("No savepoint data found to discard for {SavepointName} in transaction {TransactionId} on resource {ResourceId}",
+                    savepointToDiscard.Name, transaction.TransactionId, this.ResourceId);
             }
             return Task.CompletedTask;
         }
@@ -363,7 +363,7 @@ namespace Common.Tx
             try
             {
                 // Check if the underlying data hasn't changed since we read it (optimistic concurrency)
-                var currentValue = await _underlyingRepository.GetAsync(operation.Key, cancellationToken);
+                var currentValue = await this.underlyingRepository.GetAsync(operation.Key, cancellationToken);
 
                 // For simplicity, we'll allow the operation if:
                 // 1. It's an insert and no current value exists
@@ -386,7 +386,7 @@ namespace Common.Tx
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to validate operation for key {Key}", operation.Key);
+                this.logger.LogError(ex, "Failed to validate operation for key {Key}", operation.Key);
                 return false;
             }
         }
@@ -397,10 +397,10 @@ namespace Common.Tx
             {
                 case OperationType.Insert:
                 case OperationType.Update:
-                    await _underlyingRepository.SaveAsync(operation.Key, operation.NewValue, cancellationToken);
+                    await this.underlyingRepository.SaveAsync(operation.Key, operation.NewValue, cancellationToken);
                     break;
                 case OperationType.Delete:
-                    await _underlyingRepository.DeleteAsync(operation.Key, cancellationToken);
+                    await this.underlyingRepository.DeleteAsync(operation.Key, cancellationToken);
                     break;
                 case OperationType.Read:
                     // No action needed for reads
@@ -410,24 +410,24 @@ namespace Common.Tx
 
         private void CleanupTransactionOperations(string transactionId)
         {
-            var keysToRemove = _pendingOperations.Values
+            var keysToRemove = this.pendingOperations.Values
                 .Where(op => op.TransactionId == transactionId)
                 .Select(op => op.Key)
                 .ToList();
 
             foreach (var key in keysToRemove)
             {
-                _pendingOperations.TryRemove(key, out _);
+                this.pendingOperations.TryRemove(key, out _);
             }
 
             // Clean up savepoints for this transaction
-            var savepointKeysToRemove = _savepoints.Keys
+            var savepointKeysToRemove = this.savepoints.Keys
                 .Where(key => key.StartsWith($"{transactionId}_"))
                 .ToList();
 
             foreach (var key in savepointKeysToRemove)
             {
-                _savepoints.TryRemove(key, out _);
+                this.savepoints.TryRemove(key, out _);
             }
         }
     }

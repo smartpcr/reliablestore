@@ -1,3 +1,9 @@
+//-------------------------------------------------------------------------------
+// <copyright file="Entities.cs" company="Microsoft Corp.">
+//     Copyright (c) Microsoft Corp. All rights reserved.
+// </copyright>
+//-------------------------------------------------------------------------------
+
 namespace Common.Persistence
 {
     public class Product

@@ -1,9 +1,14 @@
-using System;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
-using ReliableStore;
+//-------------------------------------------------------------------------------
+// <copyright file="TransactionTests.cs" company="Microsoft Corp.">
+//     Copyright (c) Microsoft Corp. All rights reserved.
+// </copyright>
+//-------------------------------------------------------------------------------
 
 namespace ReliableStore.Tests
 {
+    using System;
+    using Microsoft.VisualStudio.TestTools.UnitTesting;
+    using ReliableStore;
     [TestClass]
     public class TransactionTests
     {

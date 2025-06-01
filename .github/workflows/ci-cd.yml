@@ -44,11 +44,11 @@ jobs:
         
     - name: Publish artifacts
       run: |
-        dotnet publish src/CatalogService/CatalogService.csproj -c Release -o ./publish/catalog --no-restore
-        dotnet publish src/CustomerService/CustomerService.csproj -c Release -o ./publish/customer --no-restore
-        dotnet publish src/OrderService/OrderService.csproj -c Release -o ./publish/order --no-restore
-        dotnet publish src/PaymentService/PaymentService.csproj -c Release -o ./publish/payment --no-restore
-        dotnet publish src/ShippingService/ShippingService.csproj -c Release -o ./publish/shipping --no-restore
+        dotnet publish src/poc/CatalogService/CatalogService.csproj -c Release -o ./publish/catalog --no-restore
+        dotnet publish src/poc/CustomerService/CustomerService.csproj -c Release -o ./publish/customer --no-restore
+        dotnet publish src/poc/OrderService/OrderService.csproj -c Release -o ./publish/order --no-restore
+        dotnet publish src/poc/PaymentService/PaymentService.csproj -c Release -o ./publish/payment --no-restore
+        dotnet publish src/poc/ShippingService/ShippingService.csproj -c Release -o ./publish/shipping --no-restore
         
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4

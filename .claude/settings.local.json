@@ -10,7 +10,10 @@
       "Bash(mkdir:*)",
       "Bash(docker build:*)",
       "Bash(dotnet build:*)",
-      "Bash(docker rmi:*)"
+      "Bash(docker rmi:*)",
+      "Bash(mv:*)",
+      "Bash(rg:*)",
+      "Bash(/home/xd/.nvm/versions/node/v22.16.0/lib/node_modules/@anthropic-ai/claude-code/vendor/ripgrep/x64-linux/rg -n \"namespace\\s+[^{]+\\{\\s*\\{\\s*using\" /mnt/e/work/github/crp/reliablestore/src --type cs)"
     ],
     "deny": []
   }

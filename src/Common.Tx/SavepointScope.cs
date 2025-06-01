@@ -13,23 +13,23 @@ namespace Common.Tx
     /// </summary>
     internal class SavepointScope : IDisposable
     {
-        private readonly ITransaction _transaction;
-        private readonly ISavepoint _savepoint;
+        private readonly ITransaction transaction;
+        private readonly ISavepoint savepoint;
         private bool _disposed;
 
         public SavepointScope(ITransaction transaction, ISavepoint savepoint)
         {
-            _transaction = transaction;
-            _savepoint = savepoint;
+            this.transaction = transaction;
+            this.savepoint = savepoint;
         }
 
         public void Dispose()
         {
-            if (!_disposed)
+            if (!this._disposed)
             {
                 // Savepoints are automatically cleaned up by the transaction
                 // This is mainly for future extensibility
-                _disposed = true;
+                this._disposed = true;
             }
         }
     }

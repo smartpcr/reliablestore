@@ -1,28 +1,33 @@
-using System;
-using System.Threading.Tasks;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Logging;
-using Common.Persistence;
-using Common.Tx;
+//-------------------------------------------------------------------------------
+// <copyright file="Controllers.cs" company="Microsoft Corp.">
+//     Copyright (c) Microsoft Corp. All rights reserved.
+// </copyright>
+//-------------------------------------------------------------------------------
 
 namespace CustomerService
 {
+    using System;
+    using System.Threading.Tasks;
+    using Microsoft.AspNetCore.Mvc;
+    using Microsoft.Extensions.Logging;
+    using Common.Persistence;
+    using Common.Tx;
     [ApiController]
     [Route("api/[controller]")]
     public class CustomerController : ControllerBase
     {
-        private readonly FileStore<Customer> _customerStore;
-        private readonly ITransactionFactory _transactionFactory;
-        private readonly ILogger<CustomerController> _logger;
+        private readonly FileStore<Customer> customerStore;
+        private readonly ITransactionFactory transactionFactory;
+        private readonly ILogger<CustomerController> logger;
 
         public CustomerController(
             FileStore<Customer> customerStore,
             ITransactionFactory transactionFactory,
             ILogger<CustomerController> logger)
         {
-            _customerStore = customerStore;
-            _transactionFactory = transactionFactory;
-            _logger = logger;
+            this.customerStore = customerStore;
+            this.transactionFactory = transactionFactory;
+            this.logger = logger;
         }
 
         [HttpPost("add")]
@@ -30,20 +35,20 @@ namespace CustomerService
         {
             try
             {
-                using var transaction = _transactionFactory.CreateTransaction();
+                using var transaction = this.transactionFactory.CreateTransaction();
                 
-                transaction.EnlistResource(_customerStore);
+                transaction.EnlistResource(this.customerStore);
                 
-                await _customerStore.SaveAsync(customer.Id, customer);
+                await this.customerStore.SaveAsync(customer.Id, customer);
                 
                 await transaction.CommitAsync();
                 
-                _logger.LogInformation("Customer {CustomerId} added successfully", customer.Id);
+                this.logger.LogInformation("Customer {CustomerId} added successfully", customer.Id);
                 return Ok();
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to add customer {CustomerId}", customer.Id);
+                this.logger.LogError(ex, "Failed to add customer {CustomerId}", customer.Id);
                 return StatusCode(500, "Internal server error");
             }
         }
@@ -53,7 +58,7 @@ namespace CustomerService
         {
             try
             {
-                var customer = await _customerStore.GetAsync(id);
+                var customer = await this.customerStore.GetAsync(id);
                 if (customer == null)
                 {
                     return NotFound();
@@ -62,7 +67,7 @@ namespace CustomerService
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to get customer {CustomerId}", id);
+                this.logger.LogError(ex, "Failed to get customer {CustomerId}", id);
                 return StatusCode(500, "Internal server error");
             }
         }
@@ -72,12 +77,12 @@ namespace CustomerService
         {
             try
             {
-                var customers = await _customerStore.GetAllAsync();
+                var customers = await this.customerStore.GetAllAsync();
                 return Ok(customers);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to get all customers");
+                this.logger.LogError(ex, "Failed to get all customers");
                 return StatusCode(500, "Internal server error");
             }
         }
@@ -87,27 +92,27 @@ namespace CustomerService
         {
             try
             {
-                using var transaction = _transactionFactory.CreateTransaction();
+                using var transaction = this.transactionFactory.CreateTransaction();
                 
-                transaction.EnlistResource(_customerStore);
+                transaction.EnlistResource(this.customerStore);
                 
-                var existingCustomer = await _customerStore.GetAsync(id);
+                var existingCustomer = await this.customerStore.GetAsync(id);
                 if (existingCustomer == null)
                 {
                     return NotFound();
                 }
 
                 customer.Id = id; // Ensure the ID matches
-                await _customerStore.SaveAsync(id, customer);
+                await this.customerStore.SaveAsync(id, customer);
                 
                 await transaction.CommitAsync();
                 
-                _logger.LogInformation("Customer {CustomerId} updated successfully", id);
+                this.logger.LogInformation("Customer {CustomerId} updated successfully", id);
                 return Ok();
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to update customer {CustomerId}", id);
+                this.logger.LogError(ex, "Failed to update customer {CustomerId}", id);
                 return StatusCode(500, "Internal server error");
             }
         }
@@ -117,26 +122,26 @@ namespace CustomerService
         {
             try
             {
-                using var transaction = _transactionFactory.CreateTransaction();
+                using var transaction = this.transactionFactory.CreateTransaction();
                 
-                transaction.EnlistResource(_customerStore);
+                transaction.EnlistResource(this.customerStore);
                 
-                var existingCustomer = await _customerStore.GetAsync(id);
+                var existingCustomer = await this.customerStore.GetAsync(id);
                 if (existingCustomer == null)
                 {
                     return NotFound();
                 }
 
-                await _customerStore.DeleteAsync(id);
+                await this.customerStore.DeleteAsync(id);
                 
                 await transaction.CommitAsync();
                 
-                _logger.LogInformation("Customer {CustomerId} deleted successfully", id);
+                this.logger.LogInformation("Customer {CustomerId} deleted successfully", id);
                 return Ok();
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to delete customer {CustomerId}", id);
+                this.logger.LogError(ex, "Failed to delete customer {CustomerId}", id);
                 return StatusCode(500, "Internal server error");
             }
         }

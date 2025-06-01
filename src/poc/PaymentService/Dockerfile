@@ -10,18 +10,18 @@ COPY Directory.Packages.props ./
 COPY global.json ./
 COPY src/Common.Persistence/Common.Persistence.csproj ./src/Common.Persistence/
 COPY src/Common.Tx/Common.Tx.csproj ./src/Common.Tx/
-COPY src/CatalogService/CatalogService.csproj ./src/CatalogService/
+COPY src/poc/PaymentService/PaymentService.csproj ./src/poc/PaymentService/
 
 # Restore dependencies
-RUN dotnet restore src/CatalogService/CatalogService.csproj
+RUN dotnet restore src/poc/PaymentService/PaymentService.csproj
 
 # Copy source code
 COPY src/Common.Persistence/ ./src/Common.Persistence/
 COPY src/Common.Tx/ ./src/Common.Tx/
-COPY src/CatalogService/ ./src/CatalogService/
+COPY src/poc/PaymentService/ ./src/poc/PaymentService/
 
 # Build and publish
-WORKDIR /src/src/CatalogService
+WORKDIR /src/src/poc/PaymentService
 RUN dotnet publish -c Release -o /app/publish --no-restore
 
 # Runtime stage
@@ -45,4 +45,4 @@ EXPOSE 8080
 RUN adduser --disabled-password --gecos '' appuser && chown -R appuser /app
 USER appuser
 
-ENTRYPOINT ["dotnet", "CRP.CatalogService.dll"]
+ENTRYPOINT ["dotnet", "CRP.PaymentService.dll"]
