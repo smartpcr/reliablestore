@@ -19,7 +19,18 @@ jobs:
       
     strategy:
       matrix:
-        service: [catalog, customer, order, payment, shipping]
+        service: [CatalogService, CustomerService, OrderService, PaymentService, ShippingService]
+        include:
+          - service: CatalogService
+            service_name: catalog
+          - service: CustomerService
+            service_name: customer
+          - service: OrderService
+            service_name: order
+          - service: PaymentService
+            service_name: payment
+          - service: ShippingService
+            service_name: shipping
         
     steps:
     - name: Checkout code
@@ -40,7 +51,7 @@ jobs:
       id: meta
       uses: docker/metadata-action@v5
       with:
-        images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/reliablestore-${{ matrix.service }}
+        images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/reliablestore-${{ matrix.service_name }}
         tags: |
           type=ref,event=branch
           type=ref,event=pr
@@ -52,7 +63,7 @@ jobs:
       uses: docker/build-push-action@v5
       with:
         context: .
-        file: ./src/poc/${{ matrix.service }}Service/Dockerfile
+        file: ./src/poc/${{ matrix.service }}/Dockerfile
         push: ${{ github.event_name != 'pull_request' }}
         tags: ${{ steps.meta.outputs.tags }}
         labels: ${{ steps.meta.outputs.labels }}
