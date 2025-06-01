@@ -1,0 +1,17 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<RunSettings>
+
+  <!--
+  Configure unit tests by using a .runsettings file
+  https://docs.microsoft.com/en-us/visualstudio/test/configure-unit-tests-by-using-a-dot-runsettings-file?view=vs-2019
+  -->
+
+  <RunConfiguration>
+    <!-- We are targeting 64-bit platform, right? -->
+    <TargetPlatform>x64</TargetPlatform>
+  </RunConfiguration>
+
+  <MSTest>
+    <DeploymentEnabled>False</DeploymentEnabled>
+  </MSTest>
+</RunSettings>
