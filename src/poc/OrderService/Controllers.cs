@@ -11,21 +11,26 @@ namespace OrderService
     using Microsoft.AspNetCore.Mvc;
     using Microsoft.Extensions.Logging;
     using Common.Persistence;
+    using Common.Persistence.Contract;
+    using Common.Persistence.Factory;
+    using Common.Persistence.Transaction;
     using Common.Tx;
+    using Models;
+
     [ApiController]
     [Route("api/[controller]")]
     public class OrderController : ControllerBase
     {
-        private readonly FileStore<Order> orderStore;
+        private readonly ICrudStorageProvider<Order> orderStore;
         private readonly ITransactionFactory transactionFactory;
         private readonly ILogger<OrderController> logger;
 
         public OrderController(
-            FileStore<Order> orderStore,
+            ICrudStorageProviderFactory storeFactory,
             ITransactionFactory transactionFactory,
             ILogger<OrderController> logger)
         {
-            this.orderStore = orderStore;
+            this.orderStore = storeFactory.Create<Order>(nameof(Order));
             this.transactionFactory = transactionFactory;
             this.logger = logger;
         }
@@ -35,14 +40,14 @@ namespace OrderService
         {
             try
             {
-                using var transaction = this.transactionFactory.CreateTransaction();
-                
-                transaction.EnlistResource(this.orderStore);
-                
+                await using var transaction = this.transactionFactory.CreateTransaction();
+                var orderResource = new TransactionalResource<Order>(order, c => c.Key, this.orderStore);
+                transaction.EnlistResource(orderResource);
+
                 await this.orderStore.SaveAsync(order.Id, order);
-                
+
                 await transaction.CommitAsync();
-                
+
                 this.logger.LogInformation("Order {OrderId} created successfully", order.Id);
                 return Ok();
             }
@@ -92,21 +97,24 @@ namespace OrderService
         {
             try
             {
-                using var transaction = this.transactionFactory.CreateTransaction();
-                
-                transaction.EnlistResource(this.orderStore);
-                
+                await using var transaction = this.transactionFactory.CreateTransaction();
+
                 var existingOrder = await this.orderStore.GetAsync(id);
                 if (existingOrder == null)
                 {
                     return NotFound();
                 }
 
+                var orderResource = new TransactionalResource<Order>(
+                    existingOrder,
+                    o => o.Key,
+                    this.orderStore);
+                transaction.EnlistResource(orderResource);
                 order.Id = id; // Ensure the ID matches
                 await this.orderStore.SaveAsync(id, order);
-                
+
                 await transaction.CommitAsync();
-                
+
                 this.logger.LogInformation("Order {OrderId} updated successfully", id);
                 return Ok();
             }
@@ -122,21 +130,25 @@ namespace OrderService
         {
             try
             {
-                using var transaction = this.transactionFactory.CreateTransaction();
-                
-                transaction.EnlistResource(this.orderStore);
-                
+                await using var transaction = this.transactionFactory.CreateTransaction();
+
                 var order = await this.orderStore.GetAsync(id);
                 if (order == null)
                 {
                     return NotFound();
                 }
 
+                var orderResource = new TransactionalResource<Order>(
+                    order,
+                    o => o.Key,
+                    this.orderStore);
+                transaction.EnlistResource(orderResource);
+
                 order.Status = status;
                 await this.orderStore.SaveAsync(id, order);
-                
+
                 await transaction.CommitAsync();
-                
+
                 this.logger.LogInformation("Order {OrderId} status updated to {Status}", id, status);
                 return Ok();
             }
@@ -152,20 +164,24 @@ namespace OrderService
         {
             try
             {
-                using var transaction = this.transactionFactory.CreateTransaction();
-                
-                transaction.EnlistResource(this.orderStore);
-                
+                await using var transaction = this.transactionFactory.CreateTransaction();
+
                 var existingOrder = await this.orderStore.GetAsync(id);
                 if (existingOrder == null)
                 {
                     return NotFound();
                 }
 
+                var orderResource = new TransactionalResource<Order>(
+                    existingOrder,
+                    o => o.Key,
+                    this.orderStore);
+                transaction.EnlistResource(orderResource);
+
                 await this.orderStore.DeleteAsync(id);
-                
+
                 await transaction.CommitAsync();
-                
+
                 this.logger.LogInformation("Order {OrderId} deleted successfully", id);
                 return Ok();
             }

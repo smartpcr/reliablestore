@@ -11,21 +11,26 @@ namespace PaymentService
     using Microsoft.AspNetCore.Mvc;
     using Microsoft.Extensions.Logging;
     using Common.Persistence;
+    using Common.Persistence.Contract;
+    using Common.Persistence.Factory;
+    using Common.Persistence.Transaction;
     using Common.Tx;
+    using Models;
+
     [ApiController]
     [Route("api/[controller]")]
     public class PaymentController : ControllerBase
     {
-        private readonly FileStore<Payment> paymentStore;
+        private readonly ICrudStorageProvider<Payment> paymentStore;
         private readonly ITransactionFactory transactionFactory;
         private readonly ILogger<PaymentController> logger;
 
         public PaymentController(
-            FileStore<Payment> paymentStore,
+            ICrudStorageProviderFactory storeFactory,
             ITransactionFactory transactionFactory,
             ILogger<PaymentController> logger)
         {
-            this.paymentStore = paymentStore;
+            this.paymentStore = storeFactory.Create<Payment>(nameof(Payment));
             this.transactionFactory = transactionFactory;
             this.logger = logger;
         }
@@ -36,19 +41,22 @@ namespace PaymentService
             try
             {
                 using var transaction = this.transactionFactory.CreateTransaction();
-                
-                transaction.EnlistResource(this.paymentStore);
-                
+                var paymentResource = new TransactionalResource<Payment>(
+                    payment,
+                    p => p.Key,
+                    this.paymentStore);
+                transaction.EnlistResource(paymentResource);
+
                 // Set initial status if not provided
                 if (string.IsNullOrEmpty(payment.Status))
                 {
                     payment.Status = "Processing";
                 }
-                
+
                 await this.paymentStore.SaveAsync(payment.Id, payment);
-                
+
                 await transaction.CommitAsync();
-                
+
                 this.logger.LogInformation("Payment {PaymentId} charged successfully for order {OrderId}", payment.Id, payment.OrderId);
                 return Ok();
             }
@@ -98,21 +106,24 @@ namespace PaymentService
         {
             try
             {
-                using var transaction = this.transactionFactory.CreateTransaction();
-                
-                transaction.EnlistResource(this.paymentStore);
-                
+                await using var transaction = this.transactionFactory.CreateTransaction();
+
                 var payment = await this.paymentStore.GetAsync(id);
                 if (payment == null)
                 {
                     return NotFound();
                 }
-
                 payment.Status = status;
+                var paymentResource = new TransactionalResource<Payment>(
+                    payment,
+                    p => p.Key,
+                    this.paymentStore);
+                transaction.EnlistResource(paymentResource);
+
                 await this.paymentStore.SaveAsync(id, payment);
-                
+
                 await transaction.CommitAsync();
-                
+
                 this.logger.LogInformation("Payment {PaymentId} status updated to {Status}", id, status);
                 return Ok();
             }
@@ -128,18 +139,21 @@ namespace PaymentService
         {
             try
             {
-                using var transaction = this.transactionFactory.CreateTransaction();
-                
-                transaction.EnlistResource(this.paymentStore);
-                
+                await using var transaction = this.transactionFactory.CreateTransaction();
+                var paymentResource = new TransactionalResource<Payment>(
+                    refundPayment,
+                    p => p.Key,
+                    this.paymentStore);
+                transaction.EnlistResource(paymentResource);
+
                 // Create a refund payment record
                 refundPayment.Status = "Refunded";
                 refundPayment.Amount = -Math.Abs(refundPayment.Amount); // Negative amount for refund
-                
+
                 await this.paymentStore.SaveAsync(refundPayment.Id, refundPayment);
-                
+
                 await transaction.CommitAsync();
-                
+
                 this.logger.LogInformation("Refund {PaymentId} processed successfully for order {OrderId}", refundPayment.Id, refundPayment.OrderId);
                 return Ok();
             }
@@ -155,20 +169,24 @@ namespace PaymentService
         {
             try
             {
-                using var transaction = this.transactionFactory.CreateTransaction();
-                
-                transaction.EnlistResource(this.paymentStore);
-                
+                await using var transaction = this.transactionFactory.CreateTransaction();
+
                 var existingPayment = await this.paymentStore.GetAsync(id);
                 if (existingPayment == null)
                 {
                     return NotFound();
                 }
 
+                var paymentResource = new TransactionalResource<Payment>(
+                    existingPayment,
+                    p => p.Key,
+                    this.paymentStore);
+                transaction.EnlistResource(paymentResource);
+
                 await this.paymentStore.DeleteAsync(id);
-                
+
                 await transaction.CommitAsync();
-                
+
                 this.logger.LogInformation("Payment {PaymentId} deleted successfully", id);
                 return Ok();
             }

@@ -13,7 +13,9 @@ namespace CatalogService
     using Microsoft.Extensions.Hosting;
     using Microsoft.Extensions.Logging;
     using Common.Persistence;
+    using Common.Persistence.Factory;
     using Common.Tx;
+    using Models;
 
     public class Startup
     {
@@ -26,16 +28,8 @@ namespace CatalogService
 
         public void ConfigureServices(IServiceCollection services)
         {
+            services.AddPersistence();
             services.AddControllers();
-            
-            // Register FileStore for Product
-            services.AddSingleton<FileStore<Product>>(provider =>
-            {
-                var logger = provider.GetRequiredService<ILogger<FileStore<Product>>>();
-                return new FileStore<Product>("data/products.json", logger);
-            });
-            
-            // Register transaction services
             services.AddTransactionSupport();
         }
 

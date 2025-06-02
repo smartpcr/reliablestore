@@ -13,6 +13,7 @@ namespace CustomerService
     using Microsoft.Extensions.Hosting;
     using Microsoft.Extensions.Logging;
     using Common.Persistence;
+    using Common.Persistence.Factory;
     using Common.Tx;
     public class Startup
     {
@@ -25,16 +26,8 @@ namespace CustomerService
 
         public void ConfigureServices(IServiceCollection services)
         {
+            services.AddPersistence();
             services.AddControllers();
-            
-            // Register FileStore for Customer
-            services.AddSingleton<FileStore<Customer>>(provider =>
-            {
-                var logger = provider.GetRequiredService<ILogger<FileStore<Customer>>>();
-                return new FileStore<Customer>("data/customers.json", logger);
-            });
-            
-            // Register transaction services
             services.AddTransactionSupport();
         }
 

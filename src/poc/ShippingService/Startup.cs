@@ -13,6 +13,7 @@ namespace ShippingService
     using Microsoft.Extensions.Hosting;
     using Microsoft.Extensions.Logging;
     using Common.Persistence;
+    using Common.Persistence.Factory;
     using Common.Tx;
     public class Startup
     {
@@ -25,16 +26,8 @@ namespace ShippingService
 
         public void ConfigureServices(IServiceCollection services)
         {
+            services.AddPersistence();
             services.AddControllers();
-            
-            // Register FileStore for Shipment
-            services.AddSingleton<FileStore<Shipment>>(provider =>
-            {
-                var logger = provider.GetRequiredService<ILogger<FileStore<Shipment>>>();
-                return new FileStore<Shipment>("data/shipments.json", logger);
-            });
-            
-            // Register transaction services
             services.AddTransactionSupport();
         }
 

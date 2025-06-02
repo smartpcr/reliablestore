@@ -13,6 +13,7 @@ namespace PaymentService
     using Microsoft.Extensions.Hosting;
     using Microsoft.Extensions.Logging;
     using Common.Persistence;
+    using Common.Persistence.Factory;
     using Common.Tx;
     public class Startup
     {
@@ -25,16 +26,8 @@ namespace PaymentService
 
         public void ConfigureServices(IServiceCollection services)
         {
+            services.AddPersistence();
             services.AddControllers();
-            
-            // Register FileStore for Payment
-            services.AddSingleton<FileStore<Payment>>(provider =>
-            {
-                var logger = provider.GetRequiredService<ILogger<FileStore<Payment>>>();
-                return new FileStore<Payment>("data/payments.json", logger);
-            });
-            
-            // Register transaction services
             services.AddTransactionSupport();
         }
 

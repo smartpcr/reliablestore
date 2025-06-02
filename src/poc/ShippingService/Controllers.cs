@@ -12,21 +12,26 @@ namespace ShippingService
     using Microsoft.AspNetCore.Mvc;
     using Microsoft.Extensions.Logging;
     using Common.Persistence;
+    using Common.Persistence.Contract;
+    using Common.Persistence.Factory;
+    using Common.Persistence.Transaction;
     using Common.Tx;
+    using Models;
+
     [ApiController]
     [Route("api/[controller]")]
     public class ShippingController : ControllerBase
     {
-        private readonly FileStore<Shipment> shipmentStore;
+        private readonly ICrudStorageProvider<Shipment> shipmentStore;
         private readonly ITransactionFactory transactionFactory;
         private readonly ILogger<ShippingController> logger;
 
         public ShippingController(
-            FileStore<Shipment> shipmentStore,
+            ICrudStorageProviderFactory storeFactory,
             ITransactionFactory transactionFactory,
             ILogger<ShippingController> logger)
         {
-            this.shipmentStore = shipmentStore;
+            this.shipmentStore = storeFactory.Create<Shipment>(nameof(Shipment));
             this.transactionFactory = transactionFactory;
             this.logger = logger;
         }
@@ -36,27 +41,30 @@ namespace ShippingService
         {
             try
             {
-                using var transaction = this.transactionFactory.CreateTransaction();
-                
-                transaction.EnlistResource(this.shipmentStore);
-                
+                await using var transaction = this.transactionFactory.CreateTransaction();
+                var shipmentResource = new TransactionalResource<Shipment>(
+                    shipment,
+                    s => s.Key,
+                    this.shipmentStore);
+                transaction.EnlistResource(shipmentResource);
+
                 // Set initial status if not provided
                 if (string.IsNullOrEmpty(shipment.Status))
                 {
                     shipment.Status = "Processing";
                 }
-                
+
                 // Generate tracking number if not provided
                 if (string.IsNullOrEmpty(shipment.TrackingNumber))
                 {
                     shipment.TrackingNumber = $"TRK{Guid.NewGuid().ToString("N")[..8].ToUpper()}";
                 }
-                
+
                 await this.shipmentStore.SaveAsync(shipment.Id, shipment);
-                
+
                 await transaction.CommitAsync();
-                
-                this.logger.LogInformation("Shipment {ShipmentId} created for order {OrderId} with tracking {TrackingNumber}", 
+
+                this.logger.LogInformation("Shipment {ShipmentId} created for order {OrderId} with tracking {TrackingNumber}",
                     shipment.Id, shipment.OrderId, shipment.TrackingNumber);
                 return Ok();
             }
@@ -108,7 +116,7 @@ namespace ShippingService
             {
                 var shipments = await this.shipmentStore.GetAllAsync();
                 var shipment = shipments.FirstOrDefault(s => s.TrackingNumber == trackingNumber);
-                
+
                 if (shipment == null)
                 {
                     return NotFound();
@@ -127,21 +135,22 @@ namespace ShippingService
         {
             try
             {
-                using var transaction = this.transactionFactory.CreateTransaction();
-                
-                transaction.EnlistResource(this.shipmentStore);
-                
+                await using var transaction = this.transactionFactory.CreateTransaction();
                 var shipment = await this.shipmentStore.GetAsync(id);
                 if (shipment == null)
                 {
                     return NotFound();
                 }
-
+                var shipmentResource = new TransactionalResource<Shipment>(
+                    shipment,
+                    s => s.Key,
+                    this.shipmentStore);
+                transaction.EnlistResource(shipmentResource);
                 shipment.Status = status;
                 await this.shipmentStore.SaveAsync(id, shipment);
-                
+
                 await transaction.CommitAsync();
-                
+
                 this.logger.LogInformation("Shipment {ShipmentId} status updated to {Status}", id, status);
                 return Ok();
             }
@@ -157,10 +166,12 @@ namespace ShippingService
         {
             try
             {
-                using var transaction = this.transactionFactory.CreateTransaction();
-                
-                transaction.EnlistResource(this.shipmentStore);
-                
+                await using var transaction = this.transactionFactory.CreateTransaction();
+                var shipmentResource = new TransactionalResource<Shipment>(
+                    shipment,
+                    s => s.Key,
+                    this.shipmentStore);
+                transaction.EnlistResource(shipmentResource);
                 var existingShipment = await this.shipmentStore.GetAsync(id);
                 if (existingShipment == null)
                 {
@@ -169,9 +180,9 @@ namespace ShippingService
 
                 shipment.Id = id; // Ensure the ID matches
                 await this.shipmentStore.SaveAsync(id, shipment);
-                
+
                 await transaction.CommitAsync();
-                
+
                 this.logger.LogInformation("Shipment {ShipmentId} updated successfully", id);
                 return Ok();
             }
@@ -187,20 +198,23 @@ namespace ShippingService
         {
             try
             {
-                using var transaction = this.transactionFactory.CreateTransaction();
-                
-                transaction.EnlistResource(this.shipmentStore);
-                
+                await using var transaction = this.transactionFactory.CreateTransaction();
+
                 var existingShipment = await this.shipmentStore.GetAsync(id);
                 if (existingShipment == null)
                 {
                     return NotFound();
                 }
 
+                var shipmentResource = new TransactionalResource<Shipment>(
+                    existingShipment,
+                    s => s.Key,
+                    this.shipmentStore);
+                transaction.EnlistResource(shipmentResource);
                 await this.shipmentStore.DeleteAsync(id);
-                
+
                 await transaction.CommitAsync();
-                
+
                 this.logger.LogInformation("Shipment {ShipmentId} deleted successfully", id);
                 return Ok();
             }

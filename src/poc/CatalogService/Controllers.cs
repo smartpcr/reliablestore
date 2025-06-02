@@ -10,22 +10,26 @@ namespace CatalogService
     using System.Threading.Tasks;
     using Microsoft.AspNetCore.Mvc;
     using Microsoft.Extensions.Logging;
-    using Common.Persistence;
+    using Common.Persistence.Contract;
+    using Common.Persistence.Factory;
+    using Common.Persistence.Transaction;
     using Common.Tx;
+    using Models;
+
     [ApiController]
     [Route("api/[controller]")]
     public class CatalogController : ControllerBase
     {
-        private readonly FileStore<Product> productStore;
+        private readonly ICrudStorageProvider<Product> productStore;
         private readonly ITransactionFactory transactionFactory;
         private readonly ILogger<CatalogController> logger;
 
         public CatalogController(
-            FileStore<Product> productStore,
+            ICrudStorageProviderFactory storeFactory,
             ITransactionFactory transactionFactory,
             ILogger<CatalogController> logger)
         {
-            this.productStore = productStore;
+            this.productStore = storeFactory.Create<Product>(nameof(Product));
             this.transactionFactory = transactionFactory;
             this.logger = logger;
         }
@@ -35,14 +39,14 @@ namespace CatalogService
         {
             try
             {
-                using var transaction = this.transactionFactory.CreateTransaction();
-                
-                transaction.EnlistResource(this.productStore);
-                
-                await this.productStore.SaveAsync(product.Id, product);
-                
+                await using var transaction = this.transactionFactory.CreateTransaction();
+                var productResource = new TransactionalResource<Product>(this.productStore);
+                transaction.EnlistResource(productResource);
+
+                productResource.SaveEntity(product.Id, product);
+
                 await transaction.CommitAsync();
-                
+
                 this.logger.LogInformation("Product {ProductId} added successfully", product.Id);
                 return Ok();
             }

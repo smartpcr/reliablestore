@@ -10,31 +10,32 @@ namespace OrderService
     using System.Threading.Tasks;
     using Microsoft.AspNetCore.Mvc;
     using Microsoft.Extensions.Logging;
-    using Common.Persistence;
+    using Common.Persistence.Contract;
+    using Common.Persistence.Factory;
+    using Common.Persistence.Transaction;
     using Common.Tx;
+    using Models;
+
     [ApiController]
     [Route("api/[controller]")]
     public class ProcessController : ControllerBase
     {
-        private readonly FileStore<Order> orderStore;
-        private readonly FileStore<Product> productStore;
-        private readonly FileStore<Payment> paymentStore;
-        private readonly FileStore<Shipment> shipmentStore;
+        private readonly ICrudStorageProvider<Order> orderStore;
+        private readonly ICrudStorageProvider<Product> productStore;
+        private readonly ICrudStorageProvider<Payment> paymentStore;
+        private readonly ICrudStorageProvider<Shipment> shipmentStore;
         private readonly ITransactionFactory transactionFactory;
         private readonly ILogger<ProcessController> logger;
 
         public ProcessController(
-            FileStore<Order> orderStore,
-            FileStore<Product> productStore,
-            FileStore<Payment> paymentStore,
-            FileStore<Shipment> shipmentStore,
+            ICrudStorageProviderFactory factory,
             ITransactionFactory transactionFactory,
             ILogger<ProcessController> logger)
         {
-            this.orderStore = orderStore;
-            this.productStore = productStore;
-            this.paymentStore = paymentStore;
-            this.shipmentStore = shipmentStore;
+            this.orderStore = factory.Create<Order>(nameof(Order));
+            this.productStore = factory.Create<Product>(nameof(Product));
+            this.paymentStore = factory.Create<Payment>(nameof(Payment));
+            this.shipmentStore = factory.Create<Shipment>(nameof(Shipment));
             this.transactionFactory = transactionFactory;
             this.logger = logger;
         }
@@ -44,38 +45,42 @@ namespace OrderService
         {
             try
             {
-                using var transaction = this.transactionFactory.CreateTransaction();
-                
+                await using var transaction = this.transactionFactory.CreateTransaction();
+
                 // Enlist all resources in the transaction
-                transaction.EnlistResource(this.orderStore);
-                transaction.EnlistResource(this.paymentStore);
-                transaction.EnlistResource(this.shipmentStore);
-                
+                transaction.EnlistResource(new TransactionalResource<Order>(
+                    order, o => o.Key, this.orderStore));
+
                 // Save order
                 await this.orderStore.SaveAsync(order.Id, order);
-                
+
                 // Create payment
-                var payment = new Payment 
-                { 
-                    Id = Guid.NewGuid().ToString(), 
+                var payment = new Payment
+                {
+                    Id = Guid.NewGuid().ToString(),
                     OrderId = order.Id,
                     Amount = order.TotalAmount,
                     Status = "Pending"
                 };
+                transaction.EnlistResource(new TransactionalResource<Payment>(
+                    payment, p => p.Key, this.paymentStore));
                 await this.paymentStore.SaveAsync(payment.Id, payment);
-                
+
                 // Create shipment
-                var shipment = new Shipment 
-                { 
-                    Id = Guid.NewGuid().ToString(), 
+                var shipment = new Shipment
+                {
+                    Id = Guid.NewGuid().ToString(),
                     OrderId = order.Id,
                     Status = "Pending"
                 };
+
+                transaction.EnlistResource(new TransactionalResource<Shipment>(
+                    shipment, s => s.Key, this.shipmentStore));
                 await this.shipmentStore.SaveAsync(shipment.Id, shipment);
-                
+
                 // Commit the distributed transaction
                 await transaction.CommitAsync();
-                
+
                 this.logger.LogInformation("Order {OrderId} processed successfully", order.Id);
                 return Ok(new { OrderId = order.Id, PaymentId = payment.Id, ShipmentId = shipment.Id });
             }
