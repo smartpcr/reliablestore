@@ -18,7 +18,14 @@
       "Bash(dotnet restore)",
       "Bash(rm:*)",
       "Bash(rm:*)",
-      "Bash(rm:*)"
+      "Bash(rm:*)",
+      "Bash(dotnet --version)",
+      "Bash(ls:*)",
+      "Bash(export:*)",
+      "Bash(dotnet --info)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)"
     ],
     "deny": []
   }
