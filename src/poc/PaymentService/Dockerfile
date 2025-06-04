@@ -10,6 +10,7 @@ COPY Directory.Packages.props ./
 COPY global.json ./
 COPY src/Common.Persistence/Common.Persistence.csproj ./src/Common.Persistence/
 COPY src/Common.Tx/Common.Tx.csproj ./src/Common.Tx/
+COPY src/poc/Models/Models.csproj ./src/poc/Models/
 COPY src/poc/PaymentService/PaymentService.csproj ./src/poc/PaymentService/
 
 # Restore dependencies
@@ -18,6 +19,7 @@ RUN dotnet restore src/poc/PaymentService/PaymentService.csproj
 # Copy source code
 COPY src/Common.Persistence/ ./src/Common.Persistence/
 COPY src/Common.Tx/ ./src/Common.Tx/
+COPY src/poc/Models/ ./src/poc/Models/
 COPY src/poc/PaymentService/ ./src/poc/PaymentService/
 
 # Build and publish
