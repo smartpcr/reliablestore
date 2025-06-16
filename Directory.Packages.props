@@ -28,6 +28,7 @@
 
   <!-- third party -->
   <ItemGroup>
+    <PackageVersion Include="Microsoft.Database.ManagedEsent" Version="2.0.4" />
     <PackageVersion Include="Nerdbank.GitVersioning" Version="3.7.115" />
     <PackageVersion Include="Newtonsoft.Json" Version="13.0.3" />
     <PackageVersion Include="Unity" Version="5.11.7" />
