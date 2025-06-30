@@ -10,6 +10,7 @@ namespace Common.Persistence.Providers.Esent.Tests
     using System.IO;
     using System.Threading.Tasks;
     using Common.Persistence.Configuration;
+    using Common.Persistence.Factory;
     using FluentAssertions;
     using Microsoft.Extensions.DependencyInjection;
     using Microsoft.Extensions.Logging;
@@ -19,45 +20,21 @@ namespace Common.Persistence.Providers.Esent.Tests
 
     public class EsentProviderTests : IDisposable
     {
-        private readonly string testDatabasePath;
-        private readonly string testDirectory;
+        private readonly string providerName = "EsentProviderTests";
         private readonly IServiceProvider serviceProvider;
         private readonly EsentProvider<Product> provider;
 
         public EsentProviderTests()
         {
-            // Create a unique test directory for each test
-            this.testDirectory = Path.Combine(Path.GetTempPath(), "EsentTests", Guid.NewGuid().ToString());
-            this.testDatabasePath = Path.Combine(this.testDirectory, "test.db");
-            Directory.CreateDirectory(this.testDirectory);
 
             // Setup dependency injection
             var services = new ServiceCollection();
             services.AddLogging(builder => builder.AddConsole().SetMinimumLevel(LogLevel.Debug));
-            
-            // Mock configuration reader
-            var mockConfigReader = new Mock<IConfigReader>();
-            var settings = new EsentStoreSettings
-            {
-                DatabasePath = this.testDatabasePath,
-                InstanceName = "TestInstance_" + Guid.NewGuid().ToString("N")[..8],
-                CacheSizeMB = 16
-            };
-            mockConfigReader.Setup(x => x.ReadSettings<EsentStoreSettings>()).Returns(settings);
-            services.AddSingleton(mockConfigReader.Object);
-
-            // Mock serializer
-            var mockSerializer = new Mock<Common.Persistence.Contract.ISerializer<Product>>();
-            mockSerializer.Setup(x => x.SerializeAsync(It.IsAny<Product>(), default))
-                .Returns<Product, System.Threading.CancellationToken>((product, ct) => 
-                    Task.FromResult(System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(product)));
-            mockSerializer.Setup(x => x.DeserializeAsync(It.IsAny<byte[]>(), default))
-                .Returns<byte[], System.Threading.CancellationToken>((data, ct) => 
-                    Task.FromResult(System.Text.Json.JsonSerializer.Deserialize<Product>(data)));
-            services.AddSingleton(mockSerializer.Object);
+            services.AddConfiguration();
+            services.AddPersistence();
 
             this.serviceProvider = services.BuildServiceProvider();
-            this.provider = new EsentProvider<Product>(this.serviceProvider, "Test");
+            this.provider = new EsentProvider<Product>(this.serviceProvider, this.providerName);
         }
 
         [Fact]
@@ -128,7 +105,7 @@ namespace Common.Persistence.Providers.Esent.Tests
             // Act
             await this.provider.SaveAsync(product.Key, product);
             var existsBeforeDelete = await this.provider.ExistsAsync(product.Key);
-            
+
             await this.provider.DeleteAsync(product.Key);
             var existsAfterDelete = await this.provider.ExistsAsync(product.Key);
 
@@ -147,7 +124,7 @@ namespace Common.Persistence.Providers.Esent.Tests
             // Act
             await this.provider.SaveAsync(product1.Key, product1);
             await this.provider.SaveAsync(product2.Key, product2);
-            
+
             var totalCount = await this.provider.CountAsync();
             var filteredCount = await this.provider.CountAsync(p => p.Price > 15m);
 
@@ -166,7 +143,7 @@ namespace Common.Persistence.Providers.Esent.Tests
             // Act
             await this.provider.SaveAsync(product1.Key, product1);
             await this.provider.SaveAsync(product2.Key, product2);
-            
+
             var allProducts = await this.provider.GetAllAsync(p => p.Quantity > 0);
 
             // Assert
@@ -177,21 +154,9 @@ namespace Common.Persistence.Providers.Esent.Tests
 
         public void Dispose()
         {
+            this.provider?.ClearAsync();
             this.provider?.Dispose();
             this.serviceProvider?.GetService<IDisposable>()?.Dispose();
-            
-            // Clean up test files
-            if (Directory.Exists(this.testDirectory))
-            {
-                try
-                {
-                    Directory.Delete(this.testDirectory, true);
-                }
-                catch
-                {
-                    // Ignore cleanup errors
-                }
-            }
         }
     }
 }

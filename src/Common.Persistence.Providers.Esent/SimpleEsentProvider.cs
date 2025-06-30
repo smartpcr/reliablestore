@@ -46,7 +46,7 @@ namespace Common.Persistence.Providers.Esent
 
                 // Initialize ESENT instance
                 this.instance = new Instance(this.storeSettings.InstanceName);
-                
+
                 // Set instance parameters
                 var directory = Path.GetDirectoryName(this.storeSettings.DatabasePath) ?? "data";
                 this.instance.Parameters.SystemDirectory = directory;
@@ -119,7 +119,7 @@ namespace Common.Persistence.Providers.Esent
 
                 // Create primary index on Key
                 var primaryIndexDef = "+Key\0\0";
-                Api.JetCreateIndex(this.session, tableid, "PrimaryIndex", CreateIndexGrbit.IndexPrimary | CreateIndexGrbit.IndexUnique, 
+                Api.JetCreateIndex(this.session, tableid, "PrimaryIndex", CreateIndexGrbit.IndexPrimary | CreateIndexGrbit.IndexUnique,
                     primaryIndexDef, primaryIndexDef.Length, 100);
 
                 Api.JetCloseTable(this.session, tableid);
@@ -132,7 +132,7 @@ namespace Common.Persistence.Providers.Esent
         private void OpenTable()
         {
             this.table = new Table(this.session, this.dbid, this.tableName, OpenTableGrbit.None);
-            
+
             // Get column IDs
             this.keyColumn = Api.GetTableColumnid(this.session, this.table, "Key");
             this.dataColumn = Api.GetTableColumnid(this.session, this.table, "Data");
@@ -146,22 +146,20 @@ namespace Common.Persistence.Providers.Esent
             {
                 return await Task.Run(() =>
                 {
-                    using (var transaction = new Transaction(this.session))
+                    using var transaction = new Transaction(this.session);
+                    Api.JetSetCurrentIndex(this.session, this.table, "PrimaryIndex");
+                    Api.MakeKey(this.session, this.table, key, Encoding.Unicode, MakeKeyGrbit.NewKey);
+
+                    if (Api.TrySeek(this.session, this.table, SeekGrbit.SeekEQ))
                     {
-                        Api.JetSetCurrentIndex(this.session, this.table, "PrimaryIndex");
-                        Api.MakeKey(this.session, this.table, key, Encoding.Unicode, MakeKeyGrbit.NewKey);
-                        
-                        if (Api.TrySeek(this.session, this.table, SeekGrbit.SeekEQ))
+                        var data = Api.RetrieveColumn(this.session, this.table, this.dataColumn);
+                        if (data != null)
                         {
-                            var data = Api.RetrieveColumn(this.session, this.table, this.dataColumn);
-                            if (data != null)
-                            {
-                                return JsonSerializer.Deserialize<T>(data);
-                            }
+                            return JsonSerializer.Deserialize<T>(data);
                         }
-                        
-                        return default(T);
                     }
+
+                    return default(T);
                 }, cancellationToken);
             }
             finally
@@ -173,7 +171,7 @@ namespace Common.Persistence.Providers.Esent
         public async Task<IEnumerable<T>> GetManyAsync(IEnumerable<string> keys, CancellationToken cancellationToken = default)
         {
             var results = new List<T>();
-            
+
             foreach (var key in keys)
             {
                 var entity = await this.GetAsync(key, cancellationToken);
@@ -182,7 +180,7 @@ namespace Common.Persistence.Providers.Esent
                     results.Add(entity);
                 }
             }
-            
+
             return results;
         }
 
@@ -194,32 +192,30 @@ namespace Common.Persistence.Providers.Esent
                 return await Task.Run(() =>
                 {
                     var results = new List<T>();
-                    
-                    using (var transaction = new Transaction(this.session))
+
+                    using var transaction = new Transaction(this.session);
+                    Api.JetSetCurrentIndex(this.session, this.table, null); // Use primary index
+
+                    if (Api.TryMoveFirst(this.session, this.table))
                     {
-                        Api.JetSetCurrentIndex(this.session, this.table, null); // Use primary index
-                        
-                        if (Api.TryMoveFirst(this.session, this.table))
+                        do
                         {
-                            do
+                            var data = Api.RetrieveColumn(this.session, this.table, this.dataColumn);
+                            if (data != null)
                             {
-                                var data = Api.RetrieveColumn(this.session, this.table, this.dataColumn);
-                                if (data != null)
+                                var entity = JsonSerializer.Deserialize<T>(data);
+                                if (entity != null)
                                 {
-                                    var entity = JsonSerializer.Deserialize<T>(data);
-                                    if (entity != null)
+                                    if (predicate == null || predicate.Compile()(entity))
                                     {
-                                        if (predicate == null || predicate.Compile()(entity))
-                                        {
-                                            results.Add(entity);
-                                        }
+                                        results.Add(entity);
                                     }
                                 }
                             }
-                            while (Api.TryMoveNext(this.session, this.table));
                         }
+                        while (Api.TryMoveNext(this.session, this.table));
                     }
-                    
+
                     return results;
                 }, cancellationToken);
             }
@@ -236,35 +232,29 @@ namespace Common.Persistence.Providers.Esent
             {
                 await Task.Run(async () =>
                 {
-                    using (var transaction = new Transaction(this.session))
+                    using var transaction = new Transaction(this.session);
+                    Api.JetSetCurrentIndex(this.session, this.table, "PrimaryIndex");
+                    Api.MakeKey(this.session, this.table, key, Encoding.Unicode, MakeKeyGrbit.NewKey);
+
+                    var data = JsonSerializer.SerializeToUtf8Bytes(entity);
+
+                    if (Api.TrySeek(this.session, this.table, SeekGrbit.SeekEQ))
                     {
-                        Api.JetSetCurrentIndex(this.session, this.table, "PrimaryIndex");
-                        Api.MakeKey(this.session, this.table, key, Encoding.Unicode, MakeKeyGrbit.NewKey);
-                        
-                        var data = JsonSerializer.SerializeToUtf8Bytes(entity);
-                        
-                        if (Api.TrySeek(this.session, this.table, SeekGrbit.SeekEQ))
-                        {
-                            // Update existing record
-                            using (var update = new Update(this.session, this.table, JET_prep.Replace))
-                            {
-                                Api.SetColumn(this.session, this.table, this.dataColumn, data);
-                                update.Save();
-                            }
-                        }
-                        else
-                        {
-                            // Insert new record
-                            using (var update = new Update(this.session, this.table, JET_prep.Insert))
-                            {
-                                Api.SetColumn(this.session, this.table, this.keyColumn, key, Encoding.Unicode);
-                                Api.SetColumn(this.session, this.table, this.dataColumn, data);
-                                update.Save();
-                            }
-                        }
-                        
-                        transaction.Commit(CommitTransactionGrbit.None);
+                        // Update existing record
+                        using var update = new Update(this.session, this.table, JET_prep.Replace);
+                        Api.SetColumn(this.session, this.table, this.dataColumn, data);
+                        update.Save();
                     }
+                    else
+                    {
+                        // Insert new record
+                        using var update = new Update(this.session, this.table, JET_prep.Insert);
+                        Api.SetColumn(this.session, this.table, this.keyColumn, key, Encoding.Unicode);
+                        Api.SetColumn(this.session, this.table, this.dataColumn, data);
+                        update.Save();
+                    }
+
+                    transaction.Commit(CommitTransactionGrbit.None);
                 }, cancellationToken);
             }
             finally
@@ -288,17 +278,16 @@ namespace Common.Persistence.Providers.Esent
             {
                 await Task.Run(() =>
                 {
-                    using (var transaction = new Transaction(this.session))
+                    using var transaction = new Transaction(this.session);
+                    Api.JetSetCurrentIndex(this.session, this.table, "PrimaryIndex");
+                    Api.MakeKey(this.session, this.table, key, Encoding.Unicode, MakeKeyGrbit.NewKey);
+
+                    if (Api.TrySeek(this.session, this.table, SeekGrbit.SeekEQ))
                     {
-                        Api.JetSetCurrentIndex(this.session, this.table, "PrimaryIndex");
-                        Api.MakeKey(this.session, this.table, key, Encoding.Unicode, MakeKeyGrbit.NewKey);
-                        
-                        if (Api.TrySeek(this.session, this.table, SeekGrbit.SeekEQ))
-                        {
-                            Api.JetDelete(this.session, this.table);
-                            transaction.Commit(CommitTransactionGrbit.None);
-                        }
+                        Api.JetDelete(this.session, this.table);
+                        transaction.Commit(CommitTransactionGrbit.None);
                     }
+
                 }, cancellationToken);
             }
             finally
@@ -314,12 +303,10 @@ namespace Common.Persistence.Providers.Esent
             {
                 return await Task.Run(() =>
                 {
-                    using (var transaction = new Transaction(this.session))
-                    {
-                        Api.JetSetCurrentIndex(this.session, this.table, "PrimaryIndex");
-                        Api.MakeKey(this.session, this.table, key, Encoding.Unicode, MakeKeyGrbit.NewKey);
-                        return Api.TrySeek(this.session, this.table, SeekGrbit.SeekEQ);
-                    }
+                    using var transaction = new Transaction(this.session);
+                    Api.JetSetCurrentIndex(this.session, this.table, "PrimaryIndex");
+                    Api.MakeKey(this.session, this.table, key, Encoding.Unicode, MakeKeyGrbit.NewKey);
+                    return Api.TrySeek(this.session, this.table, SeekGrbit.SeekEQ);
                 }, cancellationToken);
             }
             finally
@@ -332,6 +319,34 @@ namespace Common.Persistence.Providers.Esent
         {
             var entities = await this.GetAllAsync(predicate, cancellationToken);
             return entities.Count();
+        }
+
+        public Task<long> ClearAsync(CancellationToken cancellationToken = default)
+        {
+            return Task.Run(() =>
+            {
+                this.semaphore.Wait(cancellationToken);
+                try
+                {
+                    using var transaction = new Transaction(this.session);
+                    Api.JetIndexRecordCount(this.session, this.table, out var totalRecords, 1000);
+                    Api.JetSetCurrentIndex(this.session, this.table, null); // Use primary index
+                    Api.JetDeleteTable(this.session, this.dbid, this.table.Name);
+
+                    while (Api.TryMoveNext(this.session, this.table))
+                    {
+                        Api.JetDelete(this.session, this.table);
+                    }
+
+                    transaction.Commit(CommitTransactionGrbit.None);
+
+                    return (long)totalRecords; // Return 0 as the count after clearing
+                }
+                finally
+                {
+                    this.semaphore.Release();
+                }
+            }, cancellationToken);
         }
 
         private void EnsureDirectoryExists()

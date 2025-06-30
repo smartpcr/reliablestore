@@ -17,6 +17,12 @@
   <!-- extension -->
   <ItemGroup>
     <PackageVersion Include="Microsoft.Extensions.Caching.Memory" Version="$(ExtensionVersion)" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration" Version="$(ExtensionVersion)" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration.Abstractions" version="$(ExtensionVersion)" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration.Binder" Version="$(ExtensionVersion)" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration.CommandLine" Version="$(ExtensionVersion)" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="$(ExtensionVersion)" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration.Json" Version="$(ExtensionVersion)" />
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="$(ExtensionVersion)" />
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="$(ExtensionVersion)" />
     <PackageVersion Include="Microsoft.Extensions.Hosting" Version="$(ExtensionVersion)" />

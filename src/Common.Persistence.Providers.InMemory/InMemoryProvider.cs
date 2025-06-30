@@ -149,6 +149,14 @@ namespace Common.Persistence.Providers.InMemory
             return entities.Count();
         }
 
+        public Task<long> ClearAsync(CancellationToken cancellationToken = default)
+        {
+            var count = this.cache.Count;
+            this.cache.Clear();
+            this.logger.LogDebug("Cleared all cache entries");
+            return Task.FromResult((long)count);
+        }
+
         private void PerformEviction(object? state)
         {
             try

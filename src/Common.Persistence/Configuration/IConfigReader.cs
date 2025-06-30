@@ -11,9 +11,7 @@ namespace Common.Persistence.Configuration
 
     public interface IConfigReader
     {
-        T ReadSettings<T>() where T : class;
-
-        IReadOnlyList<PersistenceProviderSettings> ReadPersistenceProviderSettings();
+        T ReadSettings<T>(string name) where T : class, new();
 
         ProviderCapability GetProviderCapabilities(string name);
 
@@ -24,8 +22,6 @@ namespace Common.Persistence.Configuration
         BackupProviderSettings GetBackupProviderSettings(string name);
 
         MigrationProviderSettings GetMigrationProviderSettings(string name);
-
-        SerializerProviderSettings GetSerializerProviderSettings(string name);
 
         ArchivalProviderSettings GetArchivalProviderSettings(string name);
 

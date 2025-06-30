@@ -7,6 +7,7 @@
 namespace Common.Persistence.Factory
 {
     using Common.Persistence.Configuration;
+    using Microsoft.Extensions.Configuration;
     using Microsoft.Extensions.DependencyInjection;
     using Unity;
     using Unity.Injection;
@@ -50,7 +51,9 @@ namespace Common.Persistence.Factory
 
         public static IServiceCollection AddPersistence(this IServiceCollection services)
         {
-            IConfigReader configReader = new JsonConfigReader();
+            var serviceProvider = services.BuildServiceProvider();
+            var configuration = serviceProvider.GetRequiredService<IConfiguration>();
+            IConfigReader configReader = new JsonConfigReader(configuration);
             services.AddSingleton<IConfigReader>(configReader);
             services.AddSingleton<ICrudStorageProviderFactory>(new CrudStorageProviderFactory(
                 new DIContainerWrapper(services), configReader));

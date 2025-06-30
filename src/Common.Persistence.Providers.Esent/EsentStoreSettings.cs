@@ -12,7 +12,7 @@ namespace Common.Persistence.Providers.Esent
     {
         public override string Name { get; set; } = "Esent";
         public override string AssemblyName { get; set; } = typeof(EsentStoreSettings).Assembly.FullName!;
-        public override string TypeName { get; set; } = typeof(EsentProvider<>).Name;
+        public override string TypeName { get; set; } = typeof(EsentProvider<>).FullName!;
         public override bool Enabled { get; set; } = true;
         /// <summary>
         /// Gets or sets the database file path.

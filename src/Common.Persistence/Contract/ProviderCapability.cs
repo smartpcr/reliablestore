@@ -14,13 +14,14 @@ namespace Common.Persistence.Contract
     [Flags]
     public enum ProviderCapability
     {
-        Crud = 0,
-        Index = 1 << 0,
-        Archive = 1 << 1,
-        Purge = 1 << 2,
-        Backup = 1 << 3,
-        Health = 1 << 4,
-        Migration = 1 << 5,
+        None = 0,
+        Crud = 1 << 0,
+        Index = 1 << 1,
+        Archive = 1 << 2,
+        Purge = 1 << 3,
+        Backup = 1 << 4,
+        Health = 1 << 5,
+        Migration = 1 << 6,
         // Add more as needed
     }
 }

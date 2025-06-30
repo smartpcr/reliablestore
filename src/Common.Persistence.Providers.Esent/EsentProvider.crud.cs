@@ -36,7 +36,7 @@ namespace Common.Persistence.Providers.Esent
         public EsentProvider(IServiceProvider serviceProvider, string name)
             : base(serviceProvider, name)
         {
-            this.storeSettings = this.ConfigReader.ReadSettings<EsentStoreSettings>();
+            this.storeSettings = this.ConfigReader.ReadSettings<EsentStoreSettings>(name);
             this.logger = this.GetLogger<EsentProvider<T>>();
             this.tableName = typeof(T).Name;
             this.InitializeDatabase();
@@ -45,7 +45,7 @@ namespace Common.Persistence.Providers.Esent
         public EsentProvider(UnityContainer container, string name)
             : base(container, name)
         {
-            this.storeSettings = this.ConfigReader.ReadSettings<EsentStoreSettings>();
+            this.storeSettings = this.ConfigReader.ReadSettings<EsentStoreSettings>(name);
             this.logger = this.GetLogger<EsentProvider<T>>();
             this.tableName = typeof(T).Name;
             this.InitializeDatabase();
@@ -59,7 +59,7 @@ namespace Common.Persistence.Providers.Esent
 
                 // Initialize ESENT instance
                 this.instance = new Instance(this.storeSettings.InstanceName);
-                
+
                 // Set instance parameters
                 var directory = Path.GetDirectoryName(this.storeSettings.DatabasePath) ?? "data";
                 this.instance.Parameters.SystemDirectory = directory;
@@ -92,7 +92,7 @@ namespace Common.Persistence.Providers.Esent
                     this.OpenTable();
                 }
 
-                this.logger.LogInformation("ESENT database initialized at {DatabasePath} for entity type {EntityType}", 
+                this.logger.LogInformation("ESENT database initialized at {DatabasePath} for entity type {EntityType}",
                     this.storeSettings.DatabasePath, typeof(T).Name);
             }
             catch (Exception ex)
@@ -136,7 +136,7 @@ namespace Common.Persistence.Providers.Esent
 
                 // Create primary index on Key
                 var primaryIndexDef = "+Key\0\0";
-                Api.JetCreateIndex(this.session, tableid, "PrimaryIndex", CreateIndexGrbit.IndexPrimary | CreateIndexGrbit.IndexUnique, 
+                Api.JetCreateIndex(this.session, tableid, "PrimaryIndex", CreateIndexGrbit.IndexPrimary | CreateIndexGrbit.IndexUnique,
                     primaryIndexDef, primaryIndexDef.Length, 100);
 
                 Api.JetCloseTable(this.session, tableid);
@@ -149,7 +149,7 @@ namespace Common.Persistence.Providers.Esent
         private void OpenTable()
         {
             this.table = new Table(this.session, this.dbid, this.tableName, OpenTableGrbit.None);
-            
+
             // Get column IDs
             this.keyColumn = Api.GetTableColumnid(this.session, this.table, "Key");
             this.dataColumn = Api.GetTableColumnid(this.session, this.table, "Data");
@@ -167,7 +167,7 @@ namespace Common.Persistence.Providers.Esent
                     {
                         Api.JetSetCurrentIndex(this.session, this.table, "PrimaryIndex");
                         Api.MakeKey(this.session, this.table, key, Encoding.Unicode, MakeKeyGrbit.NewKey);
-                        
+
                         if (Api.TrySeek(this.session, this.table, SeekGrbit.SeekEQ))
                         {
                             var data = Api.RetrieveColumn(this.session, this.table, this.dataColumn);
@@ -176,7 +176,7 @@ namespace Common.Persistence.Providers.Esent
                                 return this.Serializer.DeserializeAsync(data, cancellationToken).Result;
                             }
                         }
-                        
+
                         return default(T);
                     }
                 }, cancellationToken);
@@ -190,7 +190,7 @@ namespace Common.Persistence.Providers.Esent
         public async Task<IEnumerable<T>> GetManyAsync(IEnumerable<string> keys, CancellationToken cancellationToken = default)
         {
             var results = new List<T>();
-            
+
             foreach (var key in keys)
             {
                 var entity = await this.GetAsync(key, cancellationToken);
@@ -199,7 +199,7 @@ namespace Common.Persistence.Providers.Esent
                     results.Add(entity);
                 }
             }
-            
+
             return results;
         }
 
@@ -211,11 +211,11 @@ namespace Common.Persistence.Providers.Esent
                 return await Task.Run(() =>
                 {
                     var results = new List<T>();
-                    
+
                     using (var transaction = new Transaction(this.session))
                     {
                         Api.JetSetCurrentIndex(this.session, this.table, null); // Use primary index
-                        
+
                         if (Api.TryMoveFirst(this.session, this.table))
                         {
                             do
@@ -236,7 +236,7 @@ namespace Common.Persistence.Providers.Esent
                             while (Api.TryMoveNext(this.session, this.table));
                         }
                     }
-                    
+
                     return results;
                 }, cancellationToken);
             }
@@ -257,9 +257,9 @@ namespace Common.Persistence.Providers.Esent
                     {
                         Api.JetSetCurrentIndex(this.session, this.table, "PrimaryIndex");
                         Api.MakeKey(this.session, this.table, key, Encoding.Unicode, MakeKeyGrbit.NewKey);
-                        
+
                         var data = await this.Serializer.SerializeAsync(entity, cancellationToken);
-                        
+
                         if (Api.TrySeek(this.session, this.table, SeekGrbit.SeekEQ))
                         {
                             // Update existing record
@@ -279,11 +279,11 @@ namespace Common.Persistence.Providers.Esent
                                 update.Save();
                             }
                         }
-                        
+
                         transaction.Commit(CommitTransactionGrbit.None);
                     }
                 }, cancellationToken);
-                
+
                 this.logger.LogDebug("Saved entity with key {Key} to ESENT database", key);
             }
             finally
@@ -311,7 +311,7 @@ namespace Common.Persistence.Providers.Esent
                     {
                         Api.JetSetCurrentIndex(this.session, this.table, "PrimaryIndex");
                         Api.MakeKey(this.session, this.table, key, Encoding.Unicode, MakeKeyGrbit.NewKey);
-                        
+
                         if (Api.TrySeek(this.session, this.table, SeekGrbit.SeekEQ))
                         {
                             Api.JetDelete(this.session, this.table);
@@ -352,6 +352,31 @@ namespace Common.Persistence.Providers.Esent
         {
             var entities = await this.GetAllAsync(predicate, cancellationToken);
             return entities.Count();
+        }
+
+        public Task<long> ClearAsync(CancellationToken cancellationToken = default)
+        {
+            return Task.Run(() =>
+            {
+                this.semaphore.Wait(cancellationToken);
+                try
+                {
+                    int totalRecords;
+                    using (var transaction = new Transaction(this.session))
+                    {
+                        Api.JetIndexRecordCount(this.session, this.table, out totalRecords, 1000);
+                        Api.JetSetCurrentIndex(this.session, this.table, null); // Use primary index
+                        Api.JetDeleteTable(this.session, this.dbid, this.table.Name);
+                        transaction.Commit(CommitTransactionGrbit.None);
+                    }
+                    this.logger.LogDebug("Cleared all entities from ESENT database");
+                    return (long)totalRecords; // Return 0 as the count after clearing
+                }
+                finally
+                {
+                    this.semaphore.Release();
+                }
+            }, cancellationToken);
         }
 
         private void EnsureDirectoryExists()

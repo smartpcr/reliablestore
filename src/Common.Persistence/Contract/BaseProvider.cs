@@ -69,42 +69,6 @@ namespace Common.Persistence.Contract
         private void ReadCapabilities(IConfigReader configReader)
         {
             this.Capabilities = configReader.GetProviderCapabilities(this.Name);
-            if ((this.Capabilities | ProviderCapability.Crud) == ProviderCapability.Crud)
-            {
-                var crudProviderFactory = this.Get<ICrudStorageProviderFactory>();
-                this.CrudProvider = crudProviderFactory.Create<T>(this.Name);
-            }
-
-            if ((this.Capabilities | ProviderCapability.Index) == ProviderCapability.Index)
-            {
-                var indexProviderFactory = this.Get<IIndexingProviderFactory>();
-                this.IndexingProvider = indexProviderFactory.Create<T>(this.Name);
-            }
-
-            if ((this.Capabilities | ProviderCapability.Archive) == ProviderCapability.Archive)
-            {
-                var archivalProviderFactory = this.Get<IArchivalProviderFactory>();
-                this.ArchivalProvider = archivalProviderFactory.Create<T>(this.Name);
-            }
-
-            if ((this.Capabilities | ProviderCapability.Purge) == ProviderCapability.Purge)
-            {
-                var purgeProviderFactory = this.Get<IPurgeProviderFactory>();
-                this.PurgeProvider = purgeProviderFactory.Create<T>(this.Name);
-            }
-
-            if ((this.Capabilities | ProviderCapability.Backup) == ProviderCapability.Backup)
-            {
-                var backupProviderFactory = this.Get<IBackupProviderFactory>();
-                this.BackupProvider = backupProviderFactory.Create<T>(this.Name);
-            }
-
-            if ((this.Capabilities | ProviderCapability.Migration) == ProviderCapability.Migration)
-            {
-                var migrationProviderFactory = this.Get<IMigrationProviderFactory>();
-                this.MigrationProvider = migrationProviderFactory.Create<T>(this.Name);
-            }
-
             var serializerFactory = this.Get<ISerializerFactory>();
             this.Serializer = serializerFactory.Create<T>(this.Name);
         }

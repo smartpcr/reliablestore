@@ -10,6 +10,7 @@ namespace Common.Persistence.Factory
     using System.Reflection;
     using Common.Persistence.Configuration;
     using Common.Persistence.Contract;
+    using Common.Persistence.Serialization;
     using Microsoft.Extensions.DependencyInjection;
     using Microsoft.Extensions.DependencyInjection.Extensions;
     using Unity;
@@ -198,9 +199,7 @@ namespace Common.Persistence.Factory
 
         public ISerializer<T> Create<T>(string name) where T : IEntity
         {
-            var serializerProviderSettings = this.configReader.GetSerializerProviderSettings(name);
-            var ctor = serializerProviderSettings.FindConstructor<T>();
-            return this.containerWrapper.TryRegisterAndGetRequired<ISerializer<T>>(name, ctor);
+            return new JsonSerializer<T>();
         }
     }
 }

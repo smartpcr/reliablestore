@@ -25,6 +25,7 @@ namespace Common.Persistence.Contract
         Task DeleteAsync(string key, CancellationToken cancellationToken = default);
         Task<bool> ExistsAsync(string key, CancellationToken cancellationToken = default);
         Task<long> CountAsync(Expression<Func<T, bool>>? predicate = null, CancellationToken cancellationToken = default);
+        Task<long> ClearAsync(CancellationToken cancellationToken = default);
     }
 }
 

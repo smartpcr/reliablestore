@@ -6,34 +6,56 @@
 
 namespace Common.Persistence.Configuration
 {
+    using System;
     using System.Collections.Generic;
     using Common.Persistence.Contract;
+    using Microsoft.Extensions.Configuration;
 
     public class JsonConfigReader : IConfigReader
     {
-        public T ReadSettings<T>() where T : class
+        private readonly IConfiguration configuration;
+
+        public JsonConfigReader(IConfiguration configuration)
         {
-            throw new System.NotImplementedException();
+            this.configuration = configuration;
         }
 
-        public IReadOnlyList<PersistenceProviderSettings> ReadPersistenceProviderSettings()
+        public T ReadSettings<T>(string name) where T : class, new()
         {
-            throw new System.NotImplementedException();
+            return this.configuration.GetConfiguredSettings<T>($"Providers:{name}");
         }
 
         public ProviderCapability GetProviderCapabilities(string name)
         {
-            throw new System.NotImplementedException();
+            var section = this.configuration.GetSection($"Providers:{name}");
+            var capabilitiesString = section["Capabilities"];
+
+            if (Enum.TryParse<ProviderCapability>(capabilitiesString, out var capabilities))
+            {
+                return capabilities;
+            }
+
+            return ProviderCapability.None;
         }
 
         public CrudStorageProviderSettings ReadCrudStorageProviderSettings(string name)
         {
-            throw new System.NotImplementedException();
+            var settings = this.configuration.GetSection($"PersistenceProviders:{name}:CrudStorageProvider").Get<CrudStorageProviderSettings>();
+            if (settings == null)
+            {
+                throw new KeyNotFoundException($"CrudStorageProvider settings for {name} not found.");
+            }
+            return settings;
         }
 
         public IndexingProviderSettings GetIndexProviderSettings(string name)
         {
-            throw new System.NotImplementedException();
+            var settings = this.configuration.GetSection($"PersistenceProviders:{name}:IndexingProvider").Get<IndexingProviderSettings>();
+            if (settings == null)
+            {
+                throw new KeyNotFoundException($"IndexingProvider settings for {name} not found.");
+            }
+            return settings;
         }
 
         public BackupProviderSettings GetBackupProviderSettings(string name)
@@ -42,11 +64,6 @@ namespace Common.Persistence.Configuration
         }
 
         public MigrationProviderSettings GetMigrationProviderSettings(string name)
-        {
-            throw new System.NotImplementedException();
-        }
-
-        public SerializerProviderSettings GetSerializerProviderSettings(string name)
         {
             throw new System.NotImplementedException();
         }

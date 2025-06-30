@@ -29,14 +29,14 @@ namespace Common.Persistence.Providers.FileSystem
         public FileSystemProvider(IServiceProvider serviceProvider, string name)
             : base(serviceProvider, name)
         {
-            this.storeSettings = this.ConfigReader.ReadSettings<FileSystemStoreSettings>();
+            this.storeSettings = this.ConfigReader.ReadSettings<FileSystemStoreSettings>(name);
             this.logger = this.GetLogger<FileSystemProvider<T>>();
         }
 
         public FileSystemProvider(UnityContainer container, string name)
             : base(container, name)
         {
-            this.storeSettings = this.ConfigReader.ReadSettings<FileSystemStoreSettings>();
+            this.storeSettings = this.ConfigReader.ReadSettings<FileSystemStoreSettings>(name);
             this.logger = this.GetLogger<FileSystemProvider<T>>();
         }
 
@@ -132,6 +132,26 @@ namespace Common.Persistence.Providers.FileSystem
         {
             var entities = await this.GetAllAsync(predicate, cancellationToken);
             return entities.Count();
+        }
+
+        public Task<long> ClearAsync(CancellationToken cancellationToken = default)
+        {
+            return Task.Run(() =>
+            {
+                lock (this.cacheLock)
+                {
+                    this.cache.Clear();
+                }
+
+                // Ensure the file is cleared as well
+                if (File.Exists(this.storeSettings.FilePath))
+                {
+                    File.Delete(this.storeSettings.FilePath);
+                }
+
+                this.logger.LogDebug("Cleared cache and deleted file {FilePath}", this.storeSettings.FilePath);
+                return 0L; // Return 0 as the count after clearing
+            }, cancellationToken);
         }
 
         private async Task EnsureCacheLoadedAsync(CancellationToken cancellationToken)

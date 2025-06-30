@@ -9,7 +9,6 @@ namespace Common.Persistence.Factory
     using System;
     using System.Reflection;
     using Common.Persistence.Configuration;
-    using Common.Persistence.Contract;
     using Microsoft.Extensions.DependencyInjection;
     using Microsoft.Extensions.DependencyInjection.Extensions;
     using Unity;
@@ -32,6 +31,22 @@ namespace Common.Persistence.Factory
 
     public static class DIContainerExtension
     {
+        public static T Get<T>(this DIContainerWrapper wrapper) where T : class
+        {
+            if (wrapper.Services != null)
+            {
+                var sp = wrapper.Services.BuildServiceProvider();
+                return sp.GetRequiredService<T>();
+            }
+
+            if (wrapper.UnityContainer != null)
+            {
+                return wrapper.UnityContainer.Resolve<T>();
+            }
+
+            throw new InvalidOperationException($"Failed to find registration for type '{typeof(T).Name}'");
+        }
+
         public static T TryRegisterAndGetRequired<T>(
             this DIContainerWrapper containerWrapper,
             string name,
