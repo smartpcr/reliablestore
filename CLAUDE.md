@@ -34,8 +34,14 @@ dotnet test src/Common.Tx.Tests/Common.Tx.Tests.csproj
 ReliableStore is a .NET 9.0 distributed transaction management solution with microservices demonstrating transactional consistency. The solution includes:
 
 ### Core Libraries
-1. **Common.Persistence** - Core data persistence library with FileStore implementation for file-based storage and entity definitions (Product, Order, Customer, Payment, Shipment)
+1. **Common.Persistence** - Core data persistence library with provider-based architecture and entity definitions (Product, Order, Customer, Payment, Shipment)
 2. **Common.Tx** - Advanced transaction management library providing distributed transaction support with ACID guarantees
+
+### Persistence Providers
+- **Common.Persistence.Providers.FileSystem** - File-based storage provider
+- **Common.Persistence.Providers.InMemory** - In-memory storage provider for testing
+- **Common.Persistence.Providers.Esent** - Windows ESENT database provider for high-performance local storage
+- **Common.Persistence.Providers.ClusterRegistry** - Windows Failover Cluster registry provider for highly available storage (Windows only)
 
 ### Microservices (Proof of Concept)
 All services use modern ASP.NET Core hosting with Microsoft.Extensions.Hosting:
