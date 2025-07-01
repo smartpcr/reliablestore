@@ -26,9 +26,10 @@ namespace Common.Persistence.Providers.Esent.Tests
     public class EsentProviderConcurrencyTests : IDisposable
     {
         private readonly ITestOutputHelper output;
-        private readonly IServiceCollection services;
         private readonly string providerName = "EsentProviderConcurrencyTests";
-        private readonly List<string> tempDatabases = new List<string>();
+        private readonly List<string> testNames = new List<string>();
+        private readonly Dictionary<string, IServiceProvider> testServiceProviders = new Dictionary<string, IServiceProvider>();
+        private readonly Dictionary<string, string> testDatabasePaths = new Dictionary<string, string>();
 
         public EsentProviderConcurrencyTests(ITestOutputHelper output)
         {
@@ -40,13 +41,7 @@ namespace Common.Persistence.Providers.Esent.Tests
                 return;
             }
 
-            // Setup dependency injection
-            this.services = new ServiceCollection();
-            this.services.AddLogging(builder => builder.AddConsole().SetMinimumLevel(LogLevel.Warning));
-            var configuration = this.services.AddConfiguration();
-            var settings = configuration.GetConfiguredSettings<EsentStoreSettings>(this.providerName);
-            this.services.AddKeyedScoped<CrudStorageProviderSettings>(this.providerName, (_, _) => settings);
-            this.services.AddPersistence();
+            // No shared initialization needed - each test creates its own service provider
         }
 
         [WindowsOnlyFact]
@@ -55,7 +50,10 @@ namespace Common.Persistence.Providers.Esent.Tests
             // Arrange
             const int threadCount = 10;
             const int operationsPerThread = 100;
-            using var provider = this.CreateProvider(nameof(Concurrent_Write_Operations_Test), useSessionPool: true);
+            var testName = nameof(Concurrent_Write_Operations_Test);
+            this.testNames.Add(testName);
+            this.CleanupTestData(testName); // Clean up any existing data before test
+            using var provider = this.CreateProvider(testName, useSessionPool: true) ?? throw new InvalidOperationException($"Failed to create provider for test {testName}");
             var errors = new ConcurrentBag<Exception>();
             var successCount = 0;
 
@@ -96,6 +94,9 @@ namespace Common.Persistence.Providers.Esent.Tests
 
             this.output.WriteLine($"Concurrent writes: {threadCount} threads × {operationsPerThread} operations = {successCount} successful writes in {stopwatch.ElapsedMilliseconds}ms");
             this.output.WriteLine($"Throughput: {successCount / stopwatch.Elapsed.TotalSeconds:F2} writes/second");
+
+            // Cleanup test data immediately
+            this.CleanupTestData(testName);
         }
 
         [WindowsOnlyFact]
@@ -105,7 +106,10 @@ namespace Common.Persistence.Providers.Esent.Tests
             const int recordCount = 1000;
             const int threadCount = 20;
             const int readsPerThread = 100;
-            using var provider = this.CreateProvider(nameof(Concurrent_Read_Operations_Test), useSessionPool: true);
+            var testName = nameof(Concurrent_Read_Operations_Test);
+            this.testNames.Add(testName);
+            this.CleanupTestData(testName); // Clean up any existing data before test
+            using var provider = this.CreateProvider(testName, useSessionPool: true) ?? throw new InvalidOperationException($"Failed to create provider for test {testName}");
             
             // Prepare test data
             var products = Enumerable.Range(1, recordCount).Select(i => new Product
@@ -155,6 +159,9 @@ namespace Common.Persistence.Providers.Esent.Tests
 
             this.output.WriteLine($"Concurrent reads: {threadCount} threads × {readsPerThread} operations = {successCount} successful reads in {stopwatch.ElapsedMilliseconds}ms");
             this.output.WriteLine($"Throughput: {successCount / stopwatch.Elapsed.TotalSeconds:F2} reads/second");
+
+            // Cleanup test data immediately
+            this.CleanupTestData(testName);
         }
 
         [WindowsOnlyFact]
@@ -163,7 +170,10 @@ namespace Common.Persistence.Providers.Esent.Tests
             // Arrange
             const int threadCount = 10;
             const int operationsPerThread = 100;
-            using var provider = this.CreateProvider(nameof(Concurrent_Mixed_Operations_Test), useSessionPool: true);
+            var testName = nameof(Concurrent_Mixed_Operations_Test);
+            this.testNames.Add(testName);
+            this.CleanupTestData(testName); // Clean up any existing data before test
+            using var provider = this.CreateProvider(testName, useSessionPool: true) ?? throw new InvalidOperationException($"Failed to create provider for test {testName}");
             
             // Prepare some initial data
             const int initialRecords = 500;
@@ -251,6 +261,9 @@ namespace Common.Persistence.Providers.Esent.Tests
             {
                 this.output.WriteLine($"  {kvp.Key}: {kvp.Value} operations");
             }
+
+            // Cleanup test data immediately
+            this.CleanupTestData(testName);
         }
 
         [WindowsOnlyFact]
@@ -260,7 +273,10 @@ namespace Common.Persistence.Providers.Esent.Tests
             const int recordCount = 1000;
             const int threadCount = 5;
             const int operationsPerThread = 20;
-            using var provider = this.CreateProvider(nameof(Concurrent_GetAll_Operations_Test), useSessionPool: true);
+            var testName = nameof(Concurrent_GetAll_Operations_Test);
+            this.testNames.Add(testName);
+            this.CleanupTestData(testName); // Clean up any existing data before test
+            using var provider = this.CreateProvider(testName, useSessionPool: true) ?? throw new InvalidOperationException($"Failed to create provider for test {testName}");
             
             // Prepare test data
             for (int i = 0; i < recordCount; i++)
@@ -308,6 +324,9 @@ namespace Common.Persistence.Providers.Esent.Tests
 
             this.output.WriteLine($"Concurrent GetAll operations: {successCount} successful in {stopwatch.ElapsedMilliseconds}ms");
             this.output.WriteLine($"Throughput: {successCount / stopwatch.Elapsed.TotalSeconds:F2} operations/second");
+
+            // Cleanup test data immediately
+            this.CleanupTestData(testName);
         }
 
         [WindowsOnlyFact]
@@ -317,7 +336,10 @@ namespace Common.Persistence.Providers.Esent.Tests
             const int threadCount = 10;
             const int attemptsPerThread = 50;
             const string sharedKey = "shared-product";
-            using var provider = this.CreateProvider(nameof(Concurrent_Conflicting_Updates_Test), useSessionPool: true);
+            var testName = nameof(Concurrent_Conflicting_Updates_Test);
+            this.testNames.Add(testName);
+            this.CleanupTestData(testName); // Clean up any existing data before test
+            using var provider = this.CreateProvider(testName, useSessionPool: true) ?? throw new InvalidOperationException($"Failed to create provider for test {testName}");
             
             // Create initial product
             var initialProduct = new Product { Id = sharedKey, Name = "Shared Product", Quantity = 0, Price = 100.0m };
@@ -361,6 +383,9 @@ namespace Common.Persistence.Providers.Esent.Tests
             this.output.WriteLine($"Concurrent conflicting updates: {totalUpdates} successful out of {threadCount * attemptsPerThread} attempts in {stopwatch.ElapsedMilliseconds}ms");
             this.output.WriteLine($"Final quantity: {finalProduct!.Quantity}, Final price: {finalProduct.Price:C}");
             this.output.WriteLine($"Success rate: {(double)totalUpdates / (threadCount * attemptsPerThread):P}");
+
+            // Cleanup test data immediately
+            this.CleanupTestData(testName);
         }
 
         [WindowsOnlyFact]
@@ -369,9 +394,15 @@ namespace Common.Persistence.Providers.Esent.Tests
             // Compare concurrency performance with and without session pool
             const int threadCount = 20;
             const int operationsPerThread = 50;
+            var testNameNoPool = nameof(SessionPool_Concurrency_Test) + "_NoPool";
+            var testNamePool = nameof(SessionPool_Concurrency_Test) + "_Pool";
+            this.testNames.Add(testNameNoPool);
+            this.testNames.Add(testNamePool);
+            this.CleanupTestData(testNameNoPool);
+            this.CleanupTestData(testNamePool);
 
             // Test without session pool
-            using (var providerNoPool = this.CreateProvider(nameof(SessionPool_Concurrency_Test) + "_NoPool", useSessionPool: false))
+            using (var providerNoPool = this.CreateProvider(testNameNoPool, useSessionPool: false) ?? throw new InvalidOperationException($"Failed to create provider for test {testNameNoPool}"))
             {
                 var stopwatchNoPool = Stopwatch.StartNew();
                 var tasksNoPool = Enumerable.Range(0, threadCount).Select(threadId => Task.Run(async () =>
@@ -390,7 +421,7 @@ namespace Common.Persistence.Providers.Esent.Tests
             }
 
             // Test with session pool
-            using (var providerWithPool = this.CreateProvider(nameof(SessionPool_Concurrency_Test) + "_Pool", useSessionPool: true))
+            using (var providerWithPool = this.CreateProvider(testNamePool, useSessionPool: true) ?? throw new InvalidOperationException($"Failed to create provider for test {testNamePool}"))
             {
                 var stopwatchPool = Stopwatch.StartNew();
                 var tasksPool = Enumerable.Range(0, threadCount).Select(threadId => Task.Run(async () =>
@@ -407,56 +438,138 @@ namespace Common.Persistence.Providers.Esent.Tests
                 stopwatchPool.Stop();
                 this.output.WriteLine($"With session pool: {threadCount} threads × {operationsPerThread} operations in {stopwatchPool.ElapsedMilliseconds}ms");
             }
+
+            // Cleanup test data immediately
+            this.CleanupTestData(testNameNoPool);
+            this.CleanupTestData(testNamePool);
         }
 
-        private ICrudStorageProvider<Product> CreateProvider(string testName, bool useSessionPool = false)
+        private ICrudStorageProvider<Product>? CreateProvider(string testName, bool useSessionPool = false)
         {
-            var dbPath = $"data/test_{testName}.db";
-            this.tempDatabases.Add(dbPath);
-
-            var settings = new EsentStoreSettings
+            try
             {
-                Name = this.providerName,
-                DatabasePath = dbPath,
-                InstanceName = $"TestInstance_{testName}",
-                UseSessionPool = useSessionPool,
-                Enabled = true
-            };
-
-            this.services.AddKeyedScoped<CrudStorageProviderSettings>(this.providerName, (_, _) => settings);
-            
-            var serviceProvider = this.services.BuildServiceProvider();
-            var factory = serviceProvider.GetRequiredService<ICrudStorageProviderFactory>();
-            return factory.Create<Product>(providerName);
-        }
-
-        public void Dispose()
-        {
-            // Cleanup temp databases
-            foreach (var dbPath in this.tempDatabases)
-            {
-                try
+                // Reuse service provider for the same test name if it exists
+                if (!this.testServiceProviders.TryGetValue(testName, out var serviceProvider))
                 {
+                    // Create a test-specific configuration to isolate data
+                    var testSpecificServices = new ServiceCollection();
+                    testSpecificServices.AddLogging(builder => builder.SetMinimumLevel(LogLevel.Warning));
+                    
+                    // Create unique database path for this test
+                    var dbPath = $"data/test_{testName}_{Guid.NewGuid():N}.db";
+                    this.testDatabasePaths[testName] = dbPath;
+                    
+                    // Create test-specific settings
+                    var testSettings = new EsentStoreSettings
+                    {
+                        Name = this.providerName,
+                        DatabasePath = dbPath,
+                        InstanceName = $"TestInstance_{testName}",
+                        UseSessionPool = useSessionPool,
+                        Enabled = true,
+                        MaxDatabaseSizeMB = 1024,
+                        CacheSizeMB = 64,
+                        EnableVersioning = true,
+                        PageSizeKB = 8
+                    };
+                    
+                    var keyPrefix = $"Providers:{testName}";
+                    // Create in-memory configuration for testSettings
+                    testSpecificServices.AddConfiguration(new Dictionary<string, string>
+                    {
+                        [$"{keyPrefix}:Name"] = testSettings.Name,
+                        [$"{keyPrefix}:DatabasePath"] = testSettings.DatabasePath,
+                        [$"{keyPrefix}:InstanceName"] = testSettings.InstanceName,
+                        [$"{keyPrefix}:UseSessionPool"] = testSettings.UseSessionPool.ToString(),
+                        [$"{keyPrefix}:Enabled"] = testSettings.Enabled.ToString(),
+                        [$"{keyPrefix}:MaxDatabaseSizeMB"] = testSettings.MaxDatabaseSizeMB.ToString(),
+                        [$"{keyPrefix}:CacheSizeMB"] = testSettings.CacheSizeMB.ToString(),
+                        [$"{keyPrefix}:EnableVersioning"] = testSettings.EnableVersioning.ToString(),
+                        [$"{keyPrefix}:PageSizeKB"] = testSettings.PageSizeKB.ToString()
+                    });
+
+                    testSpecificServices.AddKeyedSingleton<CrudStorageProviderSettings>(testName, (_, _) => testSettings);
+                    testSpecificServices.AddPersistence();
+                    
+                    serviceProvider = testSpecificServices.BuildServiceProvider();
+                    this.testServiceProviders[testName] = serviceProvider;
+                }
+                
+                var factory = serviceProvider.GetRequiredService<ICrudStorageProviderFactory>();
+                return factory.Create<Product>(testName);
+            }
+            catch (Exception ex)
+            {
+                this.output.WriteLine($"Failed to create provider: {ex.Message}");
+                return null;
+            }
+        }
+
+        private void CleanupTestData(string testName)
+        {
+            try
+            {
+                if (this.testDatabasePaths.TryGetValue(testName, out var dbPath))
+                {
+                    // Ensure directory exists
+                    var directory = System.IO.Path.GetDirectoryName(dbPath);
+                    if (!System.IO.Directory.Exists(directory))
+                    {
+                        System.IO.Directory.CreateDirectory(directory!);
+                    }
+                    
+                    // Delete database file
                     if (System.IO.File.Exists(dbPath))
                     {
                         System.IO.File.Delete(dbPath);
                     }
                     
-                    // Also clean up ESENT log files
-                    var directory = System.IO.Path.GetDirectoryName(dbPath);
+                    // Clean up ESENT log files and checkpoint files
                     if (System.IO.Directory.Exists(directory))
                     {
+                        // Delete ESENT log files
                         foreach (var file in System.IO.Directory.GetFiles(directory, "edb*.log"))
                         {
                             try { System.IO.File.Delete(file); } catch { }
                         }
+                        // Delete checkpoint files
                         foreach (var file in System.IO.Directory.GetFiles(directory, "*.chk"))
+                        {
+                            try { System.IO.File.Delete(file); } catch { }
+                        }
+                        // Delete temp files
+                        foreach (var file in System.IO.Directory.GetFiles(directory, "*.tmp"))
                         {
                             try { System.IO.File.Delete(file); } catch { }
                         }
                     }
                 }
-                catch { }
+            }
+            catch (Exception ex)
+            {
+                this.output?.WriteLine($"Error cleaning up test data for {testName}: {ex.Message}");
+            }
+        }
+
+        public void Dispose()
+        {
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                // Clean up all test data
+                foreach (var testName in this.testNames)
+                {
+                    this.CleanupTestData(testName);
+                }
+
+                // Dispose all test-specific service providers
+                foreach (var serviceProvider in this.testServiceProviders.Values)
+                {
+                    if (serviceProvider is IDisposable disposable)
+                    {
+                        disposable.Dispose();
+                    }
+                }
+                this.testServiceProviders.Clear();
             }
         }
     }

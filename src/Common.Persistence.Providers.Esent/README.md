@@ -36,7 +36,7 @@ var settings = new EsentStoreSettings
 var provider = new SimpleEsentProvider<Product>(settings);
 
 // Full provider (with DI and full persistence framework)
-services.AddSingleton<ICrudStorageProvider<Product>>(sp => 
+services.AddSingleton<ICrudStorageProvider<Product>>(sp =>
     new EsentProvider<Product>(sp, "ProductStore"));
 ```
 
@@ -138,7 +138,7 @@ Common scenarios and their handling:
 Enable detailed logging by configuring the logger:
 
 ```csharp
-services.AddLogging(builder => 
+services.AddLogging(builder =>
 {
     builder.SetMinimumLevel(LogLevel.Debug);
     builder.AddConsole();
@@ -205,16 +205,16 @@ public void ConfigureServices(IServiceCollection services)
     });
 }
 
-// ProductService.cs  
+// ProductService.cs
 public class ProductService
 {
     private readonly ICrudStorageProvider<Product> _store;
-    
+
     public async Task<Product?> GetProductAsync(string id)
     {
         return await _store.GetAsync($"Product/{id}");
     }
-    
+
     public async Task SaveProductAsync(Product product)
     {
         await _store.SaveAsync(product.Key, product);
@@ -232,7 +232,7 @@ public class IndexedEsentProvider<T> : EsentProvider<T> where T : class
     protected override void ConfigureTable(Table table)
     {
         base.ConfigureTable(table);
-        
+
         // Add custom index on entity property
         table.CreateIndex("idx_name", "+Name\0", CreateIndexGrbit.IndexUnique);
         table.CreateIndex("idx_created", "+CreatedDate\0", CreateIndexGrbit.None);
@@ -254,7 +254,7 @@ var settings = new EsentStoreSettings
     MaxSessions = 1024              // Support more concurrent operations
 };
 
-// Durability-focused configuration  
+// Durability-focused configuration
 var settings = new EsentStoreSettings
 {
     EnableLogging = true,           // Full transaction logging
@@ -271,7 +271,7 @@ var settings = new EsentStoreSettings
 public class EsentMaintenanceService
 {
     private readonly EsentProvider<T> _provider;
-    
+
     public async Task CompactDatabaseAsync()
     {
         // Offline defragmentation
@@ -279,7 +279,7 @@ public class EsentMaintenanceService
         EsentUtilities.CompactDatabase(_provider.DatabasePath);
         await _provider.StartAsync();
     }
-    
+
     public async Task<DatabaseStats> GetDatabaseStatsAsync()
     {
         return new DatabaseStats
@@ -344,13 +344,749 @@ While ESENT doesn't support native clustering, you can implement HA using:
 2. **Log Shipping**: Replicate transaction logs to standby server
 3. **Application-Level Replication**: Implement custom replication logic
 
+### Distributed Transactions with Optimistic Concurrency
+
+1. Version-Based Optimistic Locking
+
+Use ESENT's auto-incrementing version column to detect concurrent modifications
+Store version numbers when acquiring locks
+Verify version hasn't changed before releasing locks
+
+2. Distributed Lock Manager
+
+Implement a lock table with version tracking
+Support both shared and exclusive locks
+Include timeout and expiration mechanisms
+Use machine name and process ID for ownership tracking
+
+3. Two-Phase Commit Protocol
+
+Transaction log table tracks state transitions
+Each phase is logged with version information
+Supports prepare, commit, and rollback phases.
+
+```csharp
+
+using System;
+using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
+using Microsoft.Isam.Esent.Interop;
+
+/// <summary>
+/// Handles ESENT database access on shared volumes with proper synchronization
+/// </summary>
+public class SharedVolumeEsentHandler
+{
+    private readonly string _databasePath;
+    private readonly string _lockFilePath;
+    private readonly TimeSpan _lockTimeout = TimeSpan.FromSeconds(30);
+    private readonly TimeSpan _lockRetryInterval = TimeSpan.FromMilliseconds(100);
+
+    public SharedVolumeEsentHandler(string databasePath)
+    {
+        _databasePath = databasePath;
+        _lockFilePath = Path.Combine(Path.GetDirectoryName(databasePath), $"{Path.GetFileName(databasePath)}.lock");
+    }
+
+    /// <summary>
+    /// Execute an operation with file-based locking for shared volume access
+    /// </summary>
+    public async Task<T> ExecuteWithFileLockAsync<T>(Func<Task<T>> operation)
+    {
+        var lockAcquired = false;
+        var startTime = DateTime.UtcNow;
+        FileStream lockFileStream = null;
+
+        try
+        {
+            while (!lockAcquired && DateTime.UtcNow - startTime < _lockTimeout)
+            {
+                try
+                {
+                    // Try to create/open lock file exclusively
+                    lockFileStream = new FileStream(
+                        _lockFilePath,
+                        FileMode.OpenOrCreate,
+                        FileAccess.ReadWrite,
+                        FileShare.None,
+                        4096,
+                        FileOptions.DeleteOnClose);
+
+                    // Write process information to lock file
+                    var lockInfo = $"{Environment.MachineName}|{System.Diagnostics.Process.GetCurrentProcess().Id}|{DateTime.UtcNow}";
+                    var bytes = System.Text.Encoding.UTF8.GetBytes(lockInfo);
+                    await lockFileStream.WriteAsync(bytes, 0, bytes.Length);
+                    await lockFileStream.FlushAsync();
+
+                    lockAcquired = true;
+                }
+                catch (IOException)
+                {
+                    // Lock file is in use by another process
+                    await Task.Delay(_lockRetryInterval);
+                }
+            }
+
+            if (!lockAcquired)
+            {
+                throw new TimeoutException("Failed to acquire file lock within timeout period");
+            }
+
+            // Execute the operation while holding the lock
+            return await operation();
+        }
+        finally
+        {
+            // Release the lock by closing the file stream
+            lockFileStream?.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// Implement a lease-based locking mechanism for better fault tolerance
+    /// </summary>
+    public class LeaseBasedLockManager
+    {
+        private readonly string _leaseTableName = "DistributedLeases";
+        private readonly TimeSpan _leaseRenewalInterval = TimeSpan.FromSeconds(10);
+        private readonly TimeSpan _leaseDuration = TimeSpan.FromSeconds(30);
+
+        public async Task<Lease> AcquireLeaseAsync(Session session, JET_DBID dbid, string resourceId, string ownerId)
+        {
+            var lease = new Lease
+            {
+                ResourceId = resourceId,
+                OwnerId = ownerId,
+                MachineName = Environment.MachineName,
+                ProcessId = System.Diagnostics.Process.GetCurrentProcess().Id,
+                AcquiredAt = DateTime.UtcNow,
+                ExpiresAt = DateTime.UtcNow.Add(_leaseDuration)
+            };
+
+            // Start lease renewal task
+            var cancellationTokenSource = new CancellationTokenSource();
+            var renewalTask = Task.Run(async () =>
+            {
+                while (!cancellationTokenSource.Token.IsCancellationRequested)
+                {
+                    await Task.Delay(_leaseRenewalInterval, cancellationTokenSource.Token);
+                    await RenewLeaseAsync(session, dbid, lease);
+                }
+            }, cancellationTokenSource.Token);
+
+            lease.RenewalTask = renewalTask;
+            lease.CancellationTokenSource = cancellationTokenSource;
+
+            return lease;
+        }
+
+        private async Task RenewLeaseAsync(Session session, JET_DBID dbid, Lease lease)
+        {
+            using (var transaction = new Transaction(session))
+            {
+                JET_TABLEID tableid;
+                Api.JetOpenTable(session, dbid, _leaseTableName, null, 0, OpenTableGrbit.None, out tableid);
+
+                try
+                {
+                    // Find lease by resource ID and owner
+                    Api.JetSetCurrentIndex(session, tableid, null);
+                    Api.MakeKey(session, tableid, lease.ResourceId, System.Text.Encoding.UTF8, MakeKeyGrbit.NewKey);
+
+                    if (Api.TrySeek(session, tableid, SeekGrbit.SeekEQ))
+                    {
+                        // Update expiration time
+                        Api.JetPrepareUpdate(session, tableid, JET_prep.Replace);
+
+                        var columnid = Api.GetTableColumnid(session, tableid, "ExpiresAt");
+                        Api.SetColumn(session, tableid, columnid, DateTime.UtcNow.Add(_leaseDuration));
+
+                        Api.JetUpdate(session, tableid, null, 0, out _);
+                        transaction.Commit(CommitTransactionGrbit.None);
+                    }
+                }
+                finally
+                {
+                    Api.JetCloseTable(session, tableid);
+                }
+            }
+        }
+    }
+
+    public class Lease : IDisposable
+    {
+        public string ResourceId { get; set; }
+        public string OwnerId { get; set; }
+        public string MachineName { get; set; }
+        public int ProcessId { get; set; }
+        public DateTime AcquiredAt { get; set; }
+        public DateTime ExpiresAt { get; set; }
+        public Task RenewalTask { get; set; }
+        public CancellationTokenSource CancellationTokenSource { get; set; }
+
+        public void Dispose()
+        {
+            CancellationTokenSource?.Cancel();
+            try
+            {
+                RenewalTask?.Wait(TimeSpan.FromSeconds(5));
+            }
+            catch { }
+            CancellationTokenSource?.Dispose();
+        }
+    }
+}
+
+/// <summary>
+/// Optimistic concurrency control using version columns
+/// </summary>
+public class OptimisticConcurrencyHandler
+{
+    public async Task<bool> UpdateWithVersionCheckAsync(
+        Session session,
+        JET_TABLEID tableid,
+        string keyColumn,
+        string keyValue,
+        long expectedVersion,
+        Action<JET_TABLEID> updateAction)
+    {
+        using (var transaction = new Transaction(session))
+        {
+            // Seek to the record
+            Api.JetSetCurrentIndex(session, tableid, null);
+            Api.MakeKey(session, tableid, keyValue, System.Text.Encoding.UTF8, MakeKeyGrbit.NewKey);
+
+            if (!Api.TrySeek(session, tableid, SeekGrbit.SeekEQ))
+            {
+                return false; // Record not found
+            }
+
+            // Check current version
+            var versionColumnId = Api.GetTableColumnid(session, tableid, "Version");
+            var currentVersion = Api.RetrieveColumnAsInt64(session, tableid, versionColumnId) ?? 0;
+
+            if (currentVersion != expectedVersion)
+            {
+                // Version mismatch - someone else updated the record
+                return false;
+            }
+
+            // Perform the update
+            Api.JetPrepareUpdate(session, tableid, JET_prep.Replace);
+            updateAction(tableid);
+            Api.JetUpdate(session, tableid, null, 0, out _);
+
+            transaction.Commit(CommitTransactionGrbit.None);
+            return true;
+        }
+    }
+}
+
+/// <summary>
+/// Distributed SAGA pattern implementation for long-running transactions
+/// </summary>
+public class DistributedSagaCoordinator
+{
+    private readonly EsentDistributedCoordinator _coordinator;
+
+    public DistributedSagaCoordinator(EsentDistributedCoordinator coordinator)
+    {
+        _coordinator = coordinator;
+    }
+
+    public async Task<bool> ExecuteSagaAsync(string sagaId, List<SagaStep> steps)
+    {
+        var completedSteps = new Stack<SagaStep>();
+
+        try
+        {
+            foreach (var step in steps)
+            {
+                // Acquire lock for the step's resource
+                var lockId = await _coordinator.AcquireLockAsync(
+                    step.ResourceId,
+                    sagaId,
+                    LockType.Exclusive,
+                    TimeSpan.FromSeconds(30));
+
+                try
+                {
+                    // Execute the step
+                    await step.ExecuteAsync();
+                    completedSteps.Push(step);
+                }
+                finally
+                {
+                    await _coordinator.ReleaseLockAsync(lockId);
+                }
+            }
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            // Compensate in reverse order
+            while (completedSteps.Count > 0)
+            {
+                var step = completedSteps.Pop();
+                try
+                {
+                    await step.CompensateAsync();
+                }
+                catch (Exception compensateEx)
+                {
+                    // Log compensation failure
+                    Console.WriteLine($"Compensation failed for step {step.Name}: {compensateEx.Message}");
+                }
+            }
+
+            throw;
+        }
+    }
+}
+
+public class SagaStep
+{
+    public string Name { get; set; }
+    public string ResourceId { get; set; }
+    public Func<Task> ExecuteAsync { get; set; }
+    public Func<Task> CompensateAsync { get; set; }
+}
+
+// Example usage
+public class DistributedWorkflowExample
+{
+    public async Task ProcessDistributedWorkflow()
+    {
+        var dbPath = @"\\shared\database\workflow.edb";
+
+        using (var handler = new SharedVolumeEsentHandler(dbPath))
+        {
+            await handler.ExecuteWithFileLockAsync(async () =>
+            {
+                using (var coordinator = new EsentDistributedCoordinator("WorkflowInstance", dbPath))
+                {
+                    var sagaCoordinator = new DistributedSagaCoordinator(coordinator);
+
+                    var steps = new List<SagaStep>
+                    {
+                        new SagaStep
+                        {
+                            Name = "DebitAccount",
+                            ResourceId = "account-123",
+                            ExecuteAsync = async () => { /* Debit logic */ },
+                            CompensateAsync = async () => { /* Refund logic */ }
+                        },
+                        new SagaStep
+                        {
+                            Name = "CreditAccount",
+                            ResourceId = "account-456",
+                            ExecuteAsync = async () => { /* Credit logic */ },
+                            CompensateAsync = async () => { /* Reverse credit */ }
+                        }
+                    };
+
+                    await sagaCoordinator.ExecuteSagaAsync(Guid.NewGuid().ToString(), steps);
+                }
+
+                return true;
+            });
+        }
+    }
+}
+
+```
+
+### DB File on Shared Volume
+
+#### Key Considerations
+
+1. File-Based Locking for Shared Volume
+
+Use a lock file with exclusive access to coordinate database access
+Include process information for debugging
+Use FileOptions.DeleteOnClose for automatic cleanup
+
+2. Lease-Based Locking
+
+Implement lease renewal to handle process crashes
+Automatic expiration prevents deadlocks
+Background task maintains lease while active
+
+3. Version-Based Optimistic Concurrency
+
+Check version before updates
+Retry with exponential backoff on conflicts
+Track version numbers throughout transaction
+
+4. SAGA Pattern for Long Transactions
+
+Break down complex operations into steps
+Each step has a compensating action
+Automatic rollback on failure
+
+#### Best Practices
+
+- Network Resilience:
+  - Handle network interruptions gracefully,
+  - Implement retry logic with exponential backoff
+  - Use timeouts for all operations
+- Clock Synchronization
+  - Ensure all machines have synchronized clocks (use NTP)
+  - Use UTC timestamps everywhere
+  - Consider using logical clocks for ordering
+- Monitoring and Diagnostics
+  - Log all lock acquisitions and releases
+  - Track version conflicts and retry counts
+  - Monitor lease expiration and renewal
+- Performance Optimization
+  - Minimize lock hold time
+  - Use shared locks when possible
+  - Batch operations to reduce round trips
+- Failure Handling
+  - Implement dead process detection
+  - Clean up orphaned locks
+  - Use compensating transactions for recovery
+
+```csharp
+using System;
+using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
+using Microsoft.Isam.Esent.Interop;
+
+/// <summary>
+/// Handles ESENT database access on shared volumes with proper synchronization
+/// </summary>
+public class SharedVolumeEsentHandler
+{
+    private readonly string _databasePath;
+    private readonly string _lockFilePath;
+    private readonly TimeSpan _lockTimeout = TimeSpan.FromSeconds(30);
+    private readonly TimeSpan _lockRetryInterval = TimeSpan.FromMilliseconds(100);
+
+    public SharedVolumeEsentHandler(string databasePath)
+    {
+        _databasePath = databasePath;
+        _lockFilePath = Path.Combine(Path.GetDirectoryName(databasePath), $"{Path.GetFileName(databasePath)}.lock");
+    }
+
+    /// <summary>
+    /// Execute an operation with file-based locking for shared volume access
+    /// </summary>
+    public async Task<T> ExecuteWithFileLockAsync<T>(Func<Task<T>> operation)
+    {
+        var lockAcquired = false;
+        var startTime = DateTime.UtcNow;
+        FileStream lockFileStream = null;
+
+        try
+        {
+            while (!lockAcquired && DateTime.UtcNow - startTime < _lockTimeout)
+            {
+                try
+                {
+                    // Try to create/open lock file exclusively
+                    lockFileStream = new FileStream(
+                        _lockFilePath,
+                        FileMode.OpenOrCreate,
+                        FileAccess.ReadWrite,
+                        FileShare.None,
+                        4096,
+                        FileOptions.DeleteOnClose);
+
+                    // Write process information to lock file
+                    var lockInfo = $"{Environment.MachineName}|{System.Diagnostics.Process.GetCurrentProcess().Id}|{DateTime.UtcNow}";
+                    var bytes = System.Text.Encoding.UTF8.GetBytes(lockInfo);
+                    await lockFileStream.WriteAsync(bytes, 0, bytes.Length);
+                    await lockFileStream.FlushAsync();
+
+                    lockAcquired = true;
+                }
+                catch (IOException)
+                {
+                    // Lock file is in use by another process
+                    await Task.Delay(_lockRetryInterval);
+                }
+            }
+
+            if (!lockAcquired)
+            {
+                throw new TimeoutException("Failed to acquire file lock within timeout period");
+            }
+
+            // Execute the operation while holding the lock
+            return await operation();
+        }
+        finally
+        {
+            // Release the lock by closing the file stream
+            lockFileStream?.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// Implement a lease-based locking mechanism for better fault tolerance
+    /// </summary>
+    public class LeaseBasedLockManager
+    {
+        private readonly string _leaseTableName = "DistributedLeases";
+        private readonly TimeSpan _leaseRenewalInterval = TimeSpan.FromSeconds(10);
+        private readonly TimeSpan _leaseDuration = TimeSpan.FromSeconds(30);
+
+        public async Task<Lease> AcquireLeaseAsync(Session session, JET_DBID dbid, string resourceId, string ownerId)
+        {
+            var lease = new Lease
+            {
+                ResourceId = resourceId,
+                OwnerId = ownerId,
+                MachineName = Environment.MachineName,
+                ProcessId = System.Diagnostics.Process.GetCurrentProcess().Id,
+                AcquiredAt = DateTime.UtcNow,
+                ExpiresAt = DateTime.UtcNow.Add(_leaseDuration)
+            };
+
+            // Start lease renewal task
+            var cancellationTokenSource = new CancellationTokenSource();
+            var renewalTask = Task.Run(async () =>
+            {
+                while (!cancellationTokenSource.Token.IsCancellationRequested)
+                {
+                    await Task.Delay(_leaseRenewalInterval, cancellationTokenSource.Token);
+                    await RenewLeaseAsync(session, dbid, lease);
+                }
+            }, cancellationTokenSource.Token);
+
+            lease.RenewalTask = renewalTask;
+            lease.CancellationTokenSource = cancellationTokenSource;
+
+            return lease;
+        }
+
+        private async Task RenewLeaseAsync(Session session, JET_DBID dbid, Lease lease)
+        {
+            using (var transaction = new Transaction(session))
+            {
+                JET_TABLEID tableid;
+                Api.JetOpenTable(session, dbid, _leaseTableName, null, 0, OpenTableGrbit.None, out tableid);
+
+                try
+                {
+                    // Find lease by resource ID and owner
+                    Api.JetSetCurrentIndex(session, tableid, null);
+                    Api.MakeKey(session, tableid, lease.ResourceId, System.Text.Encoding.UTF8, MakeKeyGrbit.NewKey);
+
+                    if (Api.TrySeek(session, tableid, SeekGrbit.SeekEQ))
+                    {
+                        // Update expiration time
+                        Api.JetPrepareUpdate(session, tableid, JET_prep.Replace);
+
+                        var columnid = Api.GetTableColumnid(session, tableid, "ExpiresAt");
+                        Api.SetColumn(session, tableid, columnid, DateTime.UtcNow.Add(_leaseDuration));
+
+                        Api.JetUpdate(session, tableid, null, 0, out _);
+                        transaction.Commit(CommitTransactionGrbit.None);
+                    }
+                }
+                finally
+                {
+                    Api.JetCloseTable(session, tableid);
+                }
+            }
+        }
+    }
+
+    public class Lease : IDisposable
+    {
+        public string ResourceId { get; set; }
+        public string OwnerId { get; set; }
+        public string MachineName { get; set; }
+        public int ProcessId { get; set; }
+        public DateTime AcquiredAt { get; set; }
+        public DateTime ExpiresAt { get; set; }
+        public Task RenewalTask { get; set; }
+        public CancellationTokenSource CancellationTokenSource { get; set; }
+
+        public void Dispose()
+        {
+            CancellationTokenSource?.Cancel();
+            try
+            {
+                RenewalTask?.Wait(TimeSpan.FromSeconds(5));
+            }
+            catch { }
+            CancellationTokenSource?.Dispose();
+        }
+    }
+}
+
+/// <summary>
+/// Optimistic concurrency control using version columns
+/// </summary>
+public class OptimisticConcurrencyHandler
+{
+    public async Task<bool> UpdateWithVersionCheckAsync(
+        Session session,
+        JET_TABLEID tableid,
+        string keyColumn,
+        string keyValue,
+        long expectedVersion,
+        Action<JET_TABLEID> updateAction)
+    {
+        using (var transaction = new Transaction(session))
+        {
+            // Seek to the record
+            Api.JetSetCurrentIndex(session, tableid, null);
+            Api.MakeKey(session, tableid, keyValue, System.Text.Encoding.UTF8, MakeKeyGrbit.NewKey);
+
+            if (!Api.TrySeek(session, tableid, SeekGrbit.SeekEQ))
+            {
+                return false; // Record not found
+            }
+
+            // Check current version
+            var versionColumnId = Api.GetTableColumnid(session, tableid, "Version");
+            var currentVersion = Api.RetrieveColumnAsInt64(session, tableid, versionColumnId) ?? 0;
+
+            if (currentVersion != expectedVersion)
+            {
+                // Version mismatch - someone else updated the record
+                return false;
+            }
+
+            // Perform the update
+            Api.JetPrepareUpdate(session, tableid, JET_prep.Replace);
+            updateAction(tableid);
+            Api.JetUpdate(session, tableid, null, 0, out _);
+
+            transaction.Commit(CommitTransactionGrbit.None);
+            return true;
+        }
+    }
+}
+
+/// <summary>
+/// Distributed SAGA pattern implementation for long-running transactions
+/// </summary>
+public class DistributedSagaCoordinator
+{
+    private readonly EsentDistributedCoordinator _coordinator;
+
+    public DistributedSagaCoordinator(EsentDistributedCoordinator coordinator)
+    {
+        _coordinator = coordinator;
+    }
+
+    public async Task<bool> ExecuteSagaAsync(string sagaId, List<SagaStep> steps)
+    {
+        var completedSteps = new Stack<SagaStep>();
+
+        try
+        {
+            foreach (var step in steps)
+            {
+                // Acquire lock for the step's resource
+                var lockId = await _coordinator.AcquireLockAsync(
+                    step.ResourceId,
+                    sagaId,
+                    LockType.Exclusive,
+                    TimeSpan.FromSeconds(30));
+
+                try
+                {
+                    // Execute the step
+                    await step.ExecuteAsync();
+                    completedSteps.Push(step);
+                }
+                finally
+                {
+                    await _coordinator.ReleaseLockAsync(lockId);
+                }
+            }
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            // Compensate in reverse order
+            while (completedSteps.Count > 0)
+            {
+                var step = completedSteps.Pop();
+                try
+                {
+                    await step.CompensateAsync();
+                }
+                catch (Exception compensateEx)
+                {
+                    // Log compensation failure
+                    Console.WriteLine($"Compensation failed for step {step.Name}: {compensateEx.Message}");
+                }
+            }
+
+            throw;
+        }
+    }
+}
+
+public class SagaStep
+{
+    public string Name { get; set; }
+    public string ResourceId { get; set; }
+    public Func<Task> ExecuteAsync { get; set; }
+    public Func<Task> CompensateAsync { get; set; }
+}
+
+// Example usage
+public class DistributedWorkflowExample
+{
+    public async Task ProcessDistributedWorkflow()
+    {
+        var dbPath = @"\\shared\database\workflow.edb";
+
+        using (var handler = new SharedVolumeEsentHandler(dbPath))
+        {
+            await handler.ExecuteWithFileLockAsync(async () =>
+            {
+                using (var coordinator = new EsentDistributedCoordinator("WorkflowInstance", dbPath))
+                {
+                    var sagaCoordinator = new DistributedSagaCoordinator(coordinator);
+
+                    var steps = new List<SagaStep>
+                    {
+                        new SagaStep
+                        {
+                            Name = "DebitAccount",
+                            ResourceId = "account-123",
+                            ExecuteAsync = async () => { /* Debit logic */ },
+                            CompensateAsync = async () => { /* Refund logic */ }
+                        },
+                        new SagaStep
+                        {
+                            Name = "CreditAccount",
+                            ResourceId = "account-456",
+                            ExecuteAsync = async () => { /* Credit logic */ },
+                            CompensateAsync = async () => { /* Reverse credit */ }
+                        }
+                    };
+
+                    await sagaCoordinator.ExecuteSagaAsync(Guid.NewGuid().ToString(), steps);
+                }
+
+                return true;
+            });
+        }
+    }
+}
+```
+
 ## Comparison with Other Providers
 
 | Feature | ESENT | FileSystem | InMemory | ClusterRegistry |
 |---------|-------|------------|----------|-----------------|
 | Performance | High | Medium | Very High | Medium |
 | Persistence | Yes | Yes | No | Yes |
-| Transactions | Full ACID | Basic | Full | Full |
+| Transactions | Full ACID | Basic | Full | Batch only |
 | Platform | Windows | Any | Any | Windows Cluster |
 | Max Size | 16TB | OS Limit | RAM | Registry Limit |
 | Concurrent Users | High | Medium | High | Medium |

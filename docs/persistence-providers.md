@@ -7,13 +7,13 @@ ReliableStore offers a flexible, provider-based persistence architecture that al
 ## Available Providers
 
 ### 1. FileSystem Provider
-**Best for**: Development, small-scale deployments, human-readable storage
+**Best for**: Development, small-to-medium deployments, human-readable storage
 
 - **Storage**: JSON files on local file system
 - **Platform**: Cross-platform (Windows, Linux, macOS)
-- **Performance**: Medium (I/O bound)
-- **Scalability**: Limited by file system
-- **Use Cases**: Development, testing, small datasets, configuration storage
+- **Performance**: Good for most use cases
+- **Scalability**: Limited by file system (millions of files possible)
+- **Use Cases**: Development, testing, production with moderate load, configuration storage
 
 [Full Documentation →](../src/Common.Persistence.Providers.FileSystem/README.md)
 
@@ -40,13 +40,13 @@ ReliableStore offers a flexible, provider-based persistence architecture that al
 [Full Documentation →](../src/Common.Persistence.Providers.Esent/README.md)
 
 ### 4. ClusterRegistry Provider
-**Best for**: High availability, mission-critical Windows Server applications
+**Best for**: High availability requirements with small data payloads
 
 - **Storage**: Windows Failover Cluster Registry
 - **Platform**: Windows Server with Failover Clustering
-- **Performance**: Medium-High with caching
-- **Scalability**: 2-64 nodes per cluster
-- **Use Cases**: Enterprise applications, zero-downtime requirements, distributed systems
+- **Performance**: Poor for large values (>64KB), acceptable for small values
+- **Scalability**: 2-64 nodes, but limited by 1MB max value size
+- **Use Cases**: Configuration data, small metadata, service discovery
 
 [Full Documentation →](../src/Common.Persistence.Providers.ClusterRegistry/README.md)
 
@@ -56,14 +56,27 @@ ReliableStore offers a flexible, provider-based persistence architecture that al
 |---------|------------|----------|-------|-----------------|
 | **Persistence** | ✅ Yes | ❌ No | ✅ Yes | ✅ Yes |
 | **Platform** | 🌍 Any | 🌍 Any | 🪟 Windows | 🪟 Windows Server |
-| **Performance** | ⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐ |
-| **Transactions** | ✅ Basic | ✅ Full | ✅ Full ACID | ✅ Full ACID |
+| **Performance** | ⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐ |
+| **Transactions** | ✅ Basic | ✅ Full | ✅ Full ACID | ✅ Batch only |
 | **Concurrency** | 🔒 File locks | 🔒 Thread-safe | 🔒 Row-level | 🔒 Distributed |
-| **Max Size** | 💾 OS limit | 💾 RAM | 💾 16TB | 💾 Registry limit |
+| **Max Size** | 💾 OS limit | 💾 RAM | 💾 16TB | 💾 1MB per value |
 | **Query Support** | ❌ None | ❌ None | ✅ Indexed | ❌ None |
 | **High Availability** | ❌ No | ❌ No | ❌ No | ✅ Automatic |
 | **Backup** | 📁 File copy | 📸 Snapshot | 💾 Online | 📋 Export |
 | **Setup Complexity** | ⭐ Simple | ⭐ None | ⭐⭐ Moderate | ⭐⭐⭐⭐ Complex |
+
+### Performance Comparison
+
+| Operation | FileSystem | InMemory | ESENT | ClusterRegistry |
+|-----------|------------|----------|-------|-----------------|
+| **Small Write (<1KB)** | 1-5ms | <0.01ms | 1-2ms | 5-10ms |
+| **Large Write (1MB)** | 5-20ms | <0.1ms | 5-10ms | 1000-5000ms ⚠️ |
+| **Small Read (<1KB)** | 0.5-2ms | <0.01ms | <1ms | 2-5ms |
+| **Large Read (1MB)** | 2-10ms | <0.01ms | 1-5ms | 100-500ms ⚠️ |
+| **Batch Write (100x10KB)** | 50-200ms | <1ms | 20-50ms | 500-2000ms |
+| **Max Throughput** | 100-500 ops/s | 100K+ ops/s | 1K-10K ops/s | 10-50 ops/s |
+
+⚠️ **Warning**: ClusterRegistry performance degrades dramatically with large payloads due to Windows Registry limitations
 
 ## Choosing the Right Provider
 
@@ -75,9 +88,10 @@ Start → Is data temporary?
          └─ No → Continue
                   ↓
          Need high availability?
-         ├─ Yes → Windows Server available?
-         │        ├─ Yes → ClusterRegistry Provider
-         │        └─ No → Consider external solutions
+         ├─ Yes → Data size per item?
+         │        ├─ <64KB → Windows Server? → Yes → ClusterRegistry
+         │        │                          └─ No → External solutions
+         │        └─ >64KB → Consider FileSystem + replication
          └─ No → Continue
                   ↓
          Windows-only deployment?
@@ -86,6 +100,15 @@ Start → Is data temporary?
          │        └─ No → FileSystem Provider
          └─ No → FileSystem Provider
 ```
+
+### Important Performance Considerations
+
+⚠️ **ClusterRegistry Limitations**:
+- Registry values have a practical limit of ~64KB for good performance
+- Performance degrades exponentially with larger values
+- 1MB values can take 1-5 seconds to write (1000x slower than FileSystem)
+- Not suitable for storing large documents, images, or binary data
+- Best used for configuration, metadata, and service discovery only
 
 ### Use Case Recommendations
 
@@ -124,13 +147,30 @@ services.AddSingleton<IStore<Product>>(
 
 #### High Availability Production
 ```csharp
-// Windows clusters: Use ClusterRegistry
-services.AddSingleton<IStore<Product>>(
-    new ClusterPersistenceStore<Product>(new ClusterPersistenceConfiguration
+// For small metadata/config (Windows clusters)
+services.AddSingleton<IStore<ServiceConfig>>(
+    new ClusterPersistenceStore<ServiceConfig>(new ClusterPersistenceConfiguration
     {
         ClusterName = "PROD-CLUSTER",
         ResourceGroupName = "App-RG",
-        RegistryKeyPath = @"Software\App\Products"
+        RegistryKeyPath = @"Software\App\Config",
+        MaxValueSize = 64 * 1024  // 64KB limit for performance
+    }));
+
+// For larger data with HA requirements
+// Option 1: ESENT + Windows Failover Clustering with shared storage
+services.AddSingleton<IStore<Product>>(
+    new SimpleEsentProvider<Product>(new EsentStoreSettings
+    {
+        DatabasePath = @"S:\SharedStorage\products.edb",  // Cluster shared volume
+        CacheSizeMB = 512
+    }));
+
+// Option 2: FileSystem + External replication (e.g., DFS-R, rsync)
+services.AddSingleton<IStore<Product>>(
+    new FileStore<Product>("products", new FileSystemStoreSettings
+    {
+        BasePath = @"D:\ReplicatedData"  // Replicated via DFS-R
     }));
 ```
 
