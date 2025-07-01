@@ -19,14 +19,17 @@ namespace Common.Persistence.Providers.ClusterRegistry.Tests
     using Microsoft.Extensions.DependencyInjection;
     using Microsoft.Extensions.Logging;
     using Models;
+    using Xunit;
     using Xunit.Abstractions;
 
-    public class ClusterRegistryProviderPerformanceTests
+    public class ClusterRegistryProviderPerformanceTests : IDisposable
     {
         private readonly ITestOutputHelper output;
         private readonly IServiceCollection services;
         private readonly string providerName = "ClusterRegistryPerfTests";
         private readonly ClusterRegistryStoreSettings settings;
+        private readonly List<string> testNames = new List<string>();
+        private readonly Dictionary<string, IServiceProvider> testServiceProviders = new Dictionary<string, IServiceProvider>();
 
         public ClusterRegistryProviderPerformanceTests(ITestOutputHelper output)
         {
@@ -47,13 +50,79 @@ namespace Common.Persistence.Providers.ClusterRegistry.Tests
             this.services.AddPersistence();
         }
 
+        public void Dispose()
+        {
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                this.CleanupAllTestData();
+            }
+
+            // Dispose all test-specific service providers
+            foreach (var serviceProvider in this.testServiceProviders.Values)
+            {
+                if (serviceProvider is IDisposable disposable)
+                {
+                    disposable.Dispose();
+                }
+            }
+            this.testServiceProviders.Clear();
+        }
+
+        private void CleanupAllTestData()
+        {
+            if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                return;
+            }
+
+            try
+            {
+                // Clean up registry entries for each test
+                foreach (var testName in this.testNames)
+                {
+                    this.CleanupTestData(testName);
+                }
+
+                // Also clean up the root test key if empty
+                using var rootKey = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(this.settings.RootPath, true);
+                if (rootKey != null)
+                {
+                    var subKeyNames = rootKey.GetSubKeyNames();
+                    if (subKeyNames.Length == 0)
+                    {
+                        Microsoft.Win32.Registry.LocalMachine.DeleteSubKey(this.settings.RootPath, false);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                this.output?.WriteLine($"Error during cleanup: {ex.Message}");
+            }
+        }
+
+        private void CleanupTestData(string testName)
+        {
+            try
+            {
+                // Clean up the test-specific service name path
+                var testPath = $@"{this.settings.RootPath}\{this.settings.ApplicationName}\{testName}";
+                Microsoft.Win32.Registry.LocalMachine.DeleteSubKeyTree(testPath, false);
+            }
+            catch
+            {
+                // Ignore cleanup errors
+            }
+        }
+
         [WindowsOnlyFact]
         public async Task BulkInsert_Performance_Test()
         {
             // Arrange
             const int recordCount = 1000; // Registry has size limits, so we use fewer records
-            using var provider = this.CreateProvider(nameof(BulkInsert_Performance_Test));
-            if (provider == null) return;
+            var testName = nameof(BulkInsert_Performance_Test);
+            this.testNames.Add(testName);
+            this.CleanupTestData(testName); // Clean up any existing data before test
+            using var provider = this.CreateProvider(testName) ?? throw new InvalidOperationException($"Failed to create provider for test {testName}");
 
             var products = GenerateProducts(recordCount);
 
@@ -73,6 +142,9 @@ namespace Common.Persistence.Providers.ClusterRegistry.Tests
             // Verify data
             var count = await provider.CountAsync();
             count.Should().Be(recordCount);
+
+            // Cleanup test data immediately
+            this.CleanupTestData(testName);
         }
 
         [WindowsOnlyFact]
@@ -80,8 +152,10 @@ namespace Common.Persistence.Providers.ClusterRegistry.Tests
         {
             // Arrange
             const int recordCount = 500;
-            using var provider = this.CreateProvider(nameof(BulkRead_Performance_Test));
-            if (provider == null) return;
+            var testName = nameof(BulkRead_Performance_Test);
+            this.testNames.Add(testName);
+            this.CleanupTestData(testName); // Clean up any existing data before test
+            using var provider = this.CreateProvider(testName) ?? throw new InvalidOperationException($"Failed to create provider for test {testName}");
 
             var products = GenerateProducts(recordCount);
             
@@ -104,6 +178,9 @@ namespace Common.Persistence.Providers.ClusterRegistry.Tests
             var throughput = recordCount / stopwatch.Elapsed.TotalSeconds;
             this.output.WriteLine($"Sequential read {recordCount} records: {stopwatch.ElapsedMilliseconds}ms");
             this.output.WriteLine($"Throughput: {throughput:F2} reads/second");
+
+            // Cleanup test data immediately
+            this.CleanupTestData(testName);
         }
 
         [WindowsOnlyFact]
@@ -112,8 +189,10 @@ namespace Common.Persistence.Providers.ClusterRegistry.Tests
             // Arrange
             const int recordCount = 500;
             const int accessCount = 1000;
-            using var provider = this.CreateProvider(nameof(RandomAccess_Performance_Test));
-            if (provider == null) return;
+            var testName = nameof(RandomAccess_Performance_Test);
+            this.testNames.Add(testName);
+            this.CleanupTestData(testName); // Clean up any existing data before test
+            using var provider = this.CreateProvider(testName) ?? throw new InvalidOperationException($"Failed to create provider for test {testName}");
 
             var products = GenerateProducts(recordCount);
             
@@ -141,6 +220,9 @@ namespace Common.Persistence.Providers.ClusterRegistry.Tests
             var throughput = accessCount / stopwatch.Elapsed.TotalSeconds;
             this.output.WriteLine($"Random access {accessCount} reads from {recordCount} records: {stopwatch.ElapsedMilliseconds}ms");
             this.output.WriteLine($"Throughput: {throughput:F2} reads/second");
+
+            // Cleanup test data immediately
+            this.CleanupTestData(testName);
         }
 
         [WindowsOnlyFact]
@@ -148,8 +230,10 @@ namespace Common.Persistence.Providers.ClusterRegistry.Tests
         {
             // Arrange
             const int recordCount = 500;
-            using var provider = this.CreateProvider(nameof(Update_Performance_Test));
-            if (provider == null) return;
+            var testName = nameof(Update_Performance_Test);
+            this.testNames.Add(testName);
+            this.CleanupTestData(testName); // Clean up any existing data before test
+            using var provider = this.CreateProvider(testName) ?? throw new InvalidOperationException($"Failed to create provider for test {testName}");
 
             var products = GenerateProducts(recordCount);
             
@@ -178,6 +262,9 @@ namespace Common.Persistence.Providers.ClusterRegistry.Tests
             var throughput = recordCount / stopwatch.Elapsed.TotalSeconds;
             this.output.WriteLine($"Update {recordCount} records: {stopwatch.ElapsedMilliseconds}ms");
             this.output.WriteLine($"Throughput: {throughput:F2} updates/second");
+
+            // Cleanup test data immediately
+            this.CleanupTestData(testName);
         }
 
         [WindowsOnlyFact]
@@ -185,8 +272,10 @@ namespace Common.Persistence.Providers.ClusterRegistry.Tests
         {
             // Arrange
             const int recordCount = 500;
-            using var provider = this.CreateProvider(nameof(Delete_Performance_Test));
-            if (provider == null) return;
+            var testName = nameof(Delete_Performance_Test);
+            this.testNames.Add(testName);
+            this.CleanupTestData(testName); // Clean up any existing data before test
+            using var provider = this.CreateProvider(testName) ?? throw new InvalidOperationException($"Failed to create provider for test {testName}");
 
             var products = GenerateProducts(recordCount);
             
@@ -211,6 +300,9 @@ namespace Common.Persistence.Providers.ClusterRegistry.Tests
 
             var count = await provider.CountAsync();
             count.Should().Be(0);
+
+            // Cleanup test data immediately
+            this.CleanupTestData(testName);
         }
 
         [WindowsOnlyFact]
@@ -218,8 +310,10 @@ namespace Common.Persistence.Providers.ClusterRegistry.Tests
         {
             // Arrange
             const int recordCount = 500;
-            using var provider = this.CreateProvider(nameof(GetAll_Performance_Test));
-            if (provider == null) return;
+            var testName = nameof(GetAll_Performance_Test);
+            this.testNames.Add(testName);
+            this.CleanupTestData(testName); // Clean up any existing data before test
+            using var provider = this.CreateProvider(testName) ?? throw new InvalidOperationException($"Failed to create provider for test {testName}");
 
             var products = GenerateProducts(recordCount);
             
@@ -238,6 +332,9 @@ namespace Common.Persistence.Providers.ClusterRegistry.Tests
             allProducts.Count().Should().Be(recordCount);
             this.output.WriteLine($"GetAll {recordCount} records: {stopwatch.ElapsedMilliseconds}ms");
             this.output.WriteLine($"Throughput: {recordCount / stopwatch.Elapsed.TotalSeconds:F2} records/second");
+
+            // Cleanup test data immediately
+            this.CleanupTestData(testName);
         }
 
         [WindowsOnlyFact]
@@ -245,8 +342,10 @@ namespace Common.Persistence.Providers.ClusterRegistry.Tests
         {
             // Arrange
             const int recordCount = 500;
-            using var provider = this.CreateProvider(nameof(GetAll_WithPredicate_Performance_Test));
-            if (provider == null) return;
+            var testName = nameof(GetAll_WithPredicate_Performance_Test);
+            this.testNames.Add(testName);
+            this.CleanupTestData(testName); // Clean up any existing data before test
+            using var provider = this.CreateProvider(testName) ?? throw new InvalidOperationException($"Failed to create provider for test {testName}");
 
             var products = GenerateProducts(recordCount);
             
@@ -265,6 +364,9 @@ namespace Common.Persistence.Providers.ClusterRegistry.Tests
             var count = filteredProducts.Count();
             count.Should().BeGreaterThan(0).And.BeLessThan(recordCount);
             this.output.WriteLine($"GetAll with predicate from {recordCount} records returned {count} results: {stopwatch.ElapsedMilliseconds}ms");
+
+            // Cleanup test data immediately
+            this.CleanupTestData(testName);
         }
 
         [WindowsOnlyFact]
@@ -272,11 +374,16 @@ namespace Common.Persistence.Providers.ClusterRegistry.Tests
         {
             // Test with compression disabled
             const int recordCount = 200;
+            var testNameNoComp = nameof(Compression_Performance_Comparison_Test) + "_NoComp";
+            var testNameComp = nameof(Compression_Performance_Comparison_Test) + "_Comp";
+            this.testNames.Add(testNameNoComp);
+            this.testNames.Add(testNameComp);
+            this.CleanupTestData(testNameNoComp);
+            this.CleanupTestData(testNameComp);
             
             // Without compression
-            using (var providerNoCompression = this.CreateProvider(nameof(Compression_Performance_Comparison_Test) + "_NoComp", enableCompression: false))
+            using (var providerNoCompression = this.CreateProvider(testNameNoComp, enableCompression: false) ?? throw new InvalidOperationException($"Failed to create provider for test {testNameNoComp}"))
             {
-                if (providerNoCompression == null) return;
 
                 var products = GenerateProducts(recordCount);
                 var stopwatchNoComp = Stopwatch.StartNew();
@@ -289,9 +396,8 @@ namespace Common.Persistence.Providers.ClusterRegistry.Tests
             }
 
             // With compression
-            using (var providerWithCompression = this.CreateProvider(nameof(Compression_Performance_Comparison_Test) + "_Comp", enableCompression: true))
+            using (var providerWithCompression = this.CreateProvider(testNameComp, enableCompression: true) ?? throw new InvalidOperationException($"Failed to create provider for test {testNameComp}"))
             {
-                if (providerWithCompression == null) return;
 
                 var products = GenerateProducts(recordCount);
                 var stopwatchComp = Stopwatch.StartNew();
@@ -302,15 +408,63 @@ namespace Common.Persistence.Providers.ClusterRegistry.Tests
                 stopwatchComp.Stop();
                 this.output.WriteLine($"With compression - {recordCount} inserts: {stopwatchComp.ElapsedMilliseconds}ms");
             }
+
+            // Cleanup test data immediately
+            this.CleanupTestData(testNameNoComp);
+            this.CleanupTestData(testNameComp);
         }
 
         private ICrudStorageProvider<Product>? CreateProvider(string testName, bool enableCompression = true)
         {
             try
             {
-                var serviceProvider = this.services.BuildServiceProvider();
+                // Reuse service provider for the same test name if it exists
+                if (!this.testServiceProviders.TryGetValue(testName, out var serviceProvider))
+                {
+                    // Create a test-specific configuration to isolate data
+                    var testSpecificServices = new ServiceCollection();
+                    testSpecificServices.AddLogging(builder => builder.SetMinimumLevel(LogLevel.Warning));
+                    
+                    // Create test-specific settings with isolated service name
+                    var testSettings = new ClusterRegistryStoreSettings
+                    {
+                        ClusterName = this.settings.ClusterName,
+                        RootPath = this.settings.RootPath,
+                        ApplicationName = this.settings.ApplicationName,
+                        ServiceName = testName, // Use test name as service name for isolation
+                        FallbackToLocalRegistry = this.settings.FallbackToLocalRegistry,
+                        EnableCompression = enableCompression,
+                        MaxValueSizeKB = this.settings.MaxValueSizeKB,
+                        ConnectionTimeoutSeconds = this.settings.ConnectionTimeoutSeconds,
+                        RetryCount = this.settings.RetryCount,
+                        RetryDelayMilliseconds = this.settings.RetryDelayMilliseconds
+                    };
+                    
+                    var keyPrefix = $"Providers:{testName}";
+                    // Create in-memory configuration for testSettings
+                    testSpecificServices.AddConfiguration(new Dictionary<string, string>
+                    {
+                        [$"{keyPrefix}:ClusterName"] = testSettings.ClusterName,
+                        [$"{keyPrefix}:RootPath"] = testSettings.RootPath,
+                        [$"{keyPrefix}:ApplicationName"] = testSettings.ApplicationName,
+                        [$"{keyPrefix}:ServiceName"] = testSettings.ServiceName,
+                        [$"{keyPrefix}:FallbackToLocalRegistry"] = testSettings.FallbackToLocalRegistry.ToString(),
+                        [$"{keyPrefix}:EnableCompression"] = testSettings.EnableCompression.ToString(),
+                        [$"{keyPrefix}:MaxValueSizeKB"] = testSettings.MaxValueSizeKB.ToString(),
+                        [$"{keyPrefix}:ConnectionTimeoutSeconds"] = testSettings.ConnectionTimeoutSeconds.ToString(),
+                        [$"{keyPrefix}:RetryCount"] = testSettings.RetryCount.ToString(),
+                        [$"{keyPrefix}:RetryDelayMilliseconds"] = testSettings.RetryDelayMilliseconds.ToString()
+                    });
+
+                    testSpecificServices.AddKeyedSingleton<CrudStorageProviderSettings>(testName, (_, _) => testSettings);
+                    testSpecificServices.AddPersistence();
+                    
+                    serviceProvider = testSpecificServices.BuildServiceProvider();
+                    this.testServiceProviders[testName] = serviceProvider;
+                }
+                
                 var factory = serviceProvider.GetRequiredService<ICrudStorageProviderFactory>();
-                return factory.Create<Product>(providerName);
+                return factory.Create<Product>(testName);
             }
             catch (Exception ex)
             {

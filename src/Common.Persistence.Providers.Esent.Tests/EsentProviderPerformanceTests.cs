@@ -25,9 +25,10 @@ namespace Common.Persistence.Providers.Esent.Tests
     public class EsentProviderPerformanceTests : IDisposable
     {
         private readonly ITestOutputHelper output;
-        private readonly IServiceCollection services;
         private readonly string providerName = "EsentProviderPerfTests";
-        private readonly List<string> tempDatabases = new List<string>();
+        private readonly List<string> testNames = new List<string>();
+        private readonly Dictionary<string, IServiceProvider> testServiceProviders = new Dictionary<string, IServiceProvider>();
+        private readonly Dictionary<string, string> testDatabasePaths = new Dictionary<string, string>();
 
         public EsentProviderPerformanceTests(ITestOutputHelper output)
         {
@@ -39,13 +40,7 @@ namespace Common.Persistence.Providers.Esent.Tests
                 return;
             }
 
-            // Setup dependency injection
-            this.services = new ServiceCollection();
-            this.services.AddLogging(builder => builder.AddConsole().SetMinimumLevel(LogLevel.Warning));
-            var configuration = this.services.AddConfiguration();
-            var settings = configuration.GetConfiguredSettings<EsentStoreSettings>(this.providerName);
-            this.services.AddKeyedScoped<CrudStorageProviderSettings>(this.providerName, (_, _) => settings);
-            this.services.AddPersistence();
+            // No shared initialization needed - each test creates its own service provider
         }
 
         [WindowsOnlyFact]
@@ -53,7 +48,10 @@ namespace Common.Persistence.Providers.Esent.Tests
         {
             // Arrange
             const int recordCount = 10000;
-            using var provider = this.CreateProvider(nameof(BulkInsert_Performance_Test));
+            var testName = nameof(BulkInsert_Performance_Test);
+            this.testNames.Add(testName);
+            this.CleanupTestData(testName); // Clean up any existing data before test
+            using var provider = this.CreateProvider(testName) ?? throw new InvalidOperationException($"Failed to create provider for test {testName}");
             var products = GenerateProducts(recordCount);
 
             // Act
@@ -72,6 +70,9 @@ namespace Common.Persistence.Providers.Esent.Tests
             // Verify data
             var count = await provider.CountAsync();
             count.Should().Be(recordCount);
+
+            // Cleanup test data immediately
+            this.CleanupTestData(testName);
         }
 
         [WindowsOnlyFact]
@@ -79,7 +80,10 @@ namespace Common.Persistence.Providers.Esent.Tests
         {
             // Arrange
             const int recordCount = 5000;
-            using var provider = this.CreateProvider(nameof(BulkRead_Performance_Test));
+            var testName = nameof(BulkRead_Performance_Test);
+            this.testNames.Add(testName);
+            this.CleanupTestData(testName); // Clean up any existing data before test
+            using var provider = this.CreateProvider(testName) ?? throw new InvalidOperationException($"Failed to create provider for test {testName}");
             var products = GenerateProducts(recordCount);
             
             // Insert test data
@@ -101,6 +105,9 @@ namespace Common.Persistence.Providers.Esent.Tests
             var throughput = recordCount / stopwatch.Elapsed.TotalSeconds;
             this.output.WriteLine($"Sequential read {recordCount} records: {stopwatch.ElapsedMilliseconds}ms");
             this.output.WriteLine($"Throughput: {throughput:F2} reads/second");
+
+            // Cleanup test data immediately
+            this.CleanupTestData(testName);
         }
 
         [WindowsOnlyFact]
@@ -109,7 +116,10 @@ namespace Common.Persistence.Providers.Esent.Tests
             // Arrange
             const int recordCount = 5000;
             const int accessCount = 10000;
-            using var provider = this.CreateProvider(nameof(RandomAccess_Performance_Test));
+            var testName = nameof(RandomAccess_Performance_Test);
+            this.testNames.Add(testName);
+            this.CleanupTestData(testName); // Clean up any existing data before test
+            using var provider = this.CreateProvider(testName) ?? throw new InvalidOperationException($"Failed to create provider for test {testName}");
             var products = GenerateProducts(recordCount);
             
             // Insert test data
@@ -136,6 +146,9 @@ namespace Common.Persistence.Providers.Esent.Tests
             var throughput = accessCount / stopwatch.Elapsed.TotalSeconds;
             this.output.WriteLine($"Random access {accessCount} reads from {recordCount} records: {stopwatch.ElapsedMilliseconds}ms");
             this.output.WriteLine($"Throughput: {throughput:F2} reads/second");
+
+            // Cleanup test data immediately
+            this.CleanupTestData(testName);
         }
 
         [WindowsOnlyFact]
@@ -143,7 +156,10 @@ namespace Common.Persistence.Providers.Esent.Tests
         {
             // Arrange
             const int recordCount = 5000;
-            using var provider = this.CreateProvider(nameof(Update_Performance_Test));
+            var testName = nameof(Update_Performance_Test);
+            this.testNames.Add(testName);
+            this.CleanupTestData(testName); // Clean up any existing data before test
+            using var provider = this.CreateProvider(testName) ?? throw new InvalidOperationException($"Failed to create provider for test {testName}");
             var products = GenerateProducts(recordCount);
             
             // Insert test data
@@ -171,6 +187,9 @@ namespace Common.Persistence.Providers.Esent.Tests
             var throughput = recordCount / stopwatch.Elapsed.TotalSeconds;
             this.output.WriteLine($"Update {recordCount} records: {stopwatch.ElapsedMilliseconds}ms");
             this.output.WriteLine($"Throughput: {throughput:F2} updates/second");
+
+            // Cleanup test data immediately
+            this.CleanupTestData(testName);
         }
 
         [WindowsOnlyFact]
@@ -178,7 +197,10 @@ namespace Common.Persistence.Providers.Esent.Tests
         {
             // Arrange
             const int recordCount = 5000;
-            using var provider = this.CreateProvider(nameof(Delete_Performance_Test));
+            var testName = nameof(Delete_Performance_Test);
+            this.testNames.Add(testName);
+            this.CleanupTestData(testName); // Clean up any existing data before test
+            using var provider = this.CreateProvider(testName) ?? throw new InvalidOperationException($"Failed to create provider for test {testName}");
             var products = GenerateProducts(recordCount);
             
             // Insert test data
@@ -202,6 +224,9 @@ namespace Common.Persistence.Providers.Esent.Tests
 
             var count = await provider.CountAsync();
             count.Should().Be(0);
+
+            // Cleanup test data immediately
+            this.CleanupTestData(testName);
         }
 
         [WindowsOnlyFact]
@@ -209,9 +234,15 @@ namespace Common.Persistence.Providers.Esent.Tests
         {
             // Test with session pool disabled
             const int operationCount = 1000;
+            var testNameNoPool = nameof(SessionPool_Performance_Comparison_Test) + "_NoPool";
+            var testNamePool = nameof(SessionPool_Performance_Comparison_Test) + "_Pool";
+            this.testNames.Add(testNameNoPool);
+            this.testNames.Add(testNamePool);
+            this.CleanupTestData(testNameNoPool);
+            this.CleanupTestData(testNamePool);
             
             // Without session pool
-            using (var providerNoPool = this.CreateProvider(nameof(SessionPool_Performance_Comparison_Test) + "_NoPool", useSessionPool: false))
+            using (var providerNoPool = this.CreateProvider(testNameNoPool, useSessionPool: false) ?? throw new InvalidOperationException($"Failed to create provider for test {testNameNoPool}"))
             {
                 var stopwatchNoPool = Stopwatch.StartNew();
                 for (int i = 0; i < operationCount; i++)
@@ -226,7 +257,7 @@ namespace Common.Persistence.Providers.Esent.Tests
             }
 
             // With session pool
-            using (var providerWithPool = this.CreateProvider(nameof(SessionPool_Performance_Comparison_Test) + "_Pool", useSessionPool: true))
+            using (var providerWithPool = this.CreateProvider(testNamePool, useSessionPool: true) ?? throw new InvalidOperationException($"Failed to create provider for test {testNamePool}"))
             {
                 var stopwatchPool = Stopwatch.StartNew();
                 for (int i = 0; i < operationCount; i++)
@@ -239,6 +270,10 @@ namespace Common.Persistence.Providers.Esent.Tests
                 stopwatchPool.Stop();
                 this.output.WriteLine($"With session pool - {operationCount} operations: {stopwatchPool.ElapsedMilliseconds}ms");
             }
+
+            // Cleanup test data immediately
+            this.CleanupTestData(testNameNoPool);
+            this.CleanupTestData(testNamePool);
         }
 
         [WindowsOnlyFact]
@@ -246,7 +281,10 @@ namespace Common.Persistence.Providers.Esent.Tests
         {
             // Arrange
             const int recordCount = 10000;
-            using var provider = this.CreateProvider(nameof(GetAll_Performance_Test));
+            var testName = nameof(GetAll_Performance_Test);
+            this.testNames.Add(testName);
+            this.CleanupTestData(testName); // Clean up any existing data before test
+            using var provider = this.CreateProvider(testName) ?? throw new InvalidOperationException($"Failed to create provider for test {testName}");
             var products = GenerateProducts(recordCount);
             
             // Insert test data
@@ -264,6 +302,9 @@ namespace Common.Persistence.Providers.Esent.Tests
             allProducts.Count().Should().Be(recordCount);
             this.output.WriteLine($"GetAll {recordCount} records: {stopwatch.ElapsedMilliseconds}ms");
             this.output.WriteLine($"Throughput: {recordCount / stopwatch.Elapsed.TotalSeconds:F2} records/second");
+
+            // Cleanup test data immediately
+            this.CleanupTestData(testName);
         }
 
         [WindowsOnlyFact]
@@ -271,7 +312,10 @@ namespace Common.Persistence.Providers.Esent.Tests
         {
             // Arrange
             const int recordCount = 10000;
-            using var provider = this.CreateProvider(nameof(GetAll_WithPredicate_Performance_Test));
+            var testName = nameof(GetAll_WithPredicate_Performance_Test);
+            this.testNames.Add(testName);
+            this.CleanupTestData(testName); // Clean up any existing data before test
+            using var provider = this.CreateProvider(testName) ?? throw new InvalidOperationException($"Failed to create provider for test {testName}");
             var products = GenerateProducts(recordCount);
             
             // Insert test data
@@ -289,27 +333,70 @@ namespace Common.Persistence.Providers.Esent.Tests
             var count = filteredProducts.Count();
             count.Should().BeGreaterThan(0).And.BeLessThan(recordCount);
             this.output.WriteLine($"GetAll with predicate from {recordCount} records returned {count} results: {stopwatch.ElapsedMilliseconds}ms");
+
+            // Cleanup test data immediately
+            this.CleanupTestData(testName);
         }
 
-        private ICrudStorageProvider<Product> CreateProvider(string testName, bool useSessionPool = false)
+        private ICrudStorageProvider<Product>? CreateProvider(string testName, bool useSessionPool = false)
         {
-            var dbPath = $"data/test_{testName}.db";
-            this.tempDatabases.Add(dbPath);
-
-            var settings = new EsentStoreSettings
+            try
             {
-                Name = this.providerName,
-                DatabasePath = dbPath,
-                InstanceName = $"TestInstance_{testName}",
-                UseSessionPool = useSessionPool,
-                Enabled = true
-            };
+                // Reuse service provider for the same test name if it exists
+                if (!this.testServiceProviders.TryGetValue(testName, out var serviceProvider))
+                {
+                    // Create a test-specific configuration to isolate data
+                    var testSpecificServices = new ServiceCollection();
+                    testSpecificServices.AddLogging(builder => builder.SetMinimumLevel(LogLevel.Warning));
+                    
+                    // Create unique database path for this test
+                    var dbPath = $"data/test_{testName}_{Guid.NewGuid():N}.db";
+                    this.testDatabasePaths[testName] = dbPath;
+                    
+                    // Create test-specific settings
+                    var testSettings = new EsentStoreSettings
+                    {
+                        Name = this.providerName,
+                        DatabasePath = dbPath,
+                        InstanceName = $"TestInstance_{testName}",
+                        UseSessionPool = useSessionPool,
+                        Enabled = true,
+                        MaxDatabaseSizeMB = 1024,
+                        CacheSizeMB = 64,
+                        EnableVersioning = true,
+                        PageSizeKB = 8
+                    };
+                    
+                    var keyPrefix = $"Providers:{testName}";
+                    // Create in-memory configuration for testSettings
+                    testSpecificServices.AddConfiguration(new Dictionary<string, string>
+                    {
+                        [$"{keyPrefix}:Name"] = testSettings.Name,
+                        [$"{keyPrefix}:DatabasePath"] = testSettings.DatabasePath,
+                        [$"{keyPrefix}:InstanceName"] = testSettings.InstanceName,
+                        [$"{keyPrefix}:UseSessionPool"] = testSettings.UseSessionPool.ToString(),
+                        [$"{keyPrefix}:Enabled"] = testSettings.Enabled.ToString(),
+                        [$"{keyPrefix}:MaxDatabaseSizeMB"] = testSettings.MaxDatabaseSizeMB.ToString(),
+                        [$"{keyPrefix}:CacheSizeMB"] = testSettings.CacheSizeMB.ToString(),
+                        [$"{keyPrefix}:EnableVersioning"] = testSettings.EnableVersioning.ToString(),
+                        [$"{keyPrefix}:PageSizeKB"] = testSettings.PageSizeKB.ToString()
+                    });
 
-            this.services.AddKeyedScoped<CrudStorageProviderSettings>(this.providerName, (_, _) => settings);
-            
-            var serviceProvider = this.services.BuildServiceProvider();
-            var factory = serviceProvider.GetRequiredService<ICrudStorageProviderFactory>();
-            return factory.Create<Product>(providerName);
+                    testSpecificServices.AddKeyedSingleton<CrudStorageProviderSettings>(testName, (_, _) => testSettings);
+                    testSpecificServices.AddPersistence();
+                    
+                    serviceProvider = testSpecificServices.BuildServiceProvider();
+                    this.testServiceProviders[testName] = serviceProvider;
+                }
+                
+                var factory = serviceProvider.GetRequiredService<ICrudStorageProviderFactory>();
+                return factory.Create<Product>(testName);
+            }
+            catch (Exception ex)
+            {
+                this.output.WriteLine($"Failed to create provider: {ex.Message}");
+                return null;
+            }
         }
 
         private static List<Product> GenerateProducts(int count)
@@ -323,33 +410,71 @@ namespace Common.Persistence.Providers.Esent.Tests
             }).ToList();
         }
 
-        public void Dispose()
+        private void CleanupTestData(string testName)
         {
-            // Cleanup temp databases
-            foreach (var dbPath in this.tempDatabases)
+            try
             {
-                try
+                if (this.testDatabasePaths.TryGetValue(testName, out var dbPath))
                 {
+                    // Ensure directory exists
+                    var directory = System.IO.Path.GetDirectoryName(dbPath);
+                    if (!System.IO.Directory.Exists(directory))
+                    {
+                        System.IO.Directory.CreateDirectory(directory!);
+                    }
+                    
+                    // Delete database file
                     if (System.IO.File.Exists(dbPath))
                     {
                         System.IO.File.Delete(dbPath);
                     }
                     
-                    // Also clean up ESENT log files
-                    var directory = System.IO.Path.GetDirectoryName(dbPath);
+                    // Clean up ESENT log files and checkpoint files
                     if (System.IO.Directory.Exists(directory))
                     {
+                        // Delete ESENT log files
                         foreach (var file in System.IO.Directory.GetFiles(directory, "edb*.log"))
                         {
                             try { System.IO.File.Delete(file); } catch { }
                         }
+                        // Delete checkpoint files
                         foreach (var file in System.IO.Directory.GetFiles(directory, "*.chk"))
+                        {
+                            try { System.IO.File.Delete(file); } catch { }
+                        }
+                        // Delete temp files
+                        foreach (var file in System.IO.Directory.GetFiles(directory, "*.tmp"))
                         {
                             try { System.IO.File.Delete(file); } catch { }
                         }
                     }
                 }
-                catch { }
+            }
+            catch (Exception ex)
+            {
+                this.output?.WriteLine($"Error cleaning up test data for {testName}: {ex.Message}");
+            }
+        }
+
+        public void Dispose()
+        {
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                // Clean up all test data
+                foreach (var testName in this.testNames)
+                {
+                    this.CleanupTestData(testName);
+                }
+
+                // Dispose all test-specific service providers
+                foreach (var serviceProvider in this.testServiceProviders.Values)
+                {
+                    if (serviceProvider is IDisposable disposable)
+                    {
+                        disposable.Dispose();
+                    }
+                }
+                this.testServiceProviders.Clear();
             }
         }
     }

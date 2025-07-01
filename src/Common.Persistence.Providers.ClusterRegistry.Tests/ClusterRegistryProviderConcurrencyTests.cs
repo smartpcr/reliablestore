@@ -124,8 +124,7 @@ namespace Common.Persistence.Providers.ClusterRegistry.Tests
             const int operationsPerThread = 20;
             var testName = nameof(Concurrent_Write_Operations_Test);
             this.testNames.Add(testName);
-            using var provider = this.CreateProvider(testName);
-            if (provider == null) return;
+            using var provider = this.CreateProvider(testName) ?? throw new InvalidOperationException($"Failed to create provider for test {testName}");
 
             var errors = new ConcurrentBag<Exception>();
             var successCount = 0;
@@ -181,8 +180,7 @@ namespace Common.Persistence.Providers.ClusterRegistry.Tests
             const int readsPerThread = 50;
             var testName = nameof(Concurrent_Read_Operations_Test);
             this.testNames.Add(testName);
-            using var provider = this.CreateProvider(testName);
-            if (provider == null) return;
+            using var provider = this.CreateProvider(testName) ?? throw new InvalidOperationException($"Failed to create provider for test {testName}");
             
             // Prepare test data
             var products = Enumerable.Range(1, recordCount).Select(i => new Product
@@ -244,8 +242,7 @@ namespace Common.Persistence.Providers.ClusterRegistry.Tests
             const int operationsPerThread = 40;
             var testName = nameof(Concurrent_Mixed_Operations_Test);
             this.testNames.Add(testName);
-            using var provider = this.CreateProvider(testName);
-            if (provider == null) return;
+            using var provider = this.CreateProvider(testName) ?? throw new InvalidOperationException($"Failed to create provider for test {testName}");
             
             // Prepare some initial data
             const int initialRecords = 50;
@@ -347,8 +344,7 @@ namespace Common.Persistence.Providers.ClusterRegistry.Tests
             const int operationsPerThread = 10;
             var testName = nameof(Concurrent_GetAll_Operations_Test);
             this.testNames.Add(testName);
-            using var provider = this.CreateProvider(testName);
-            if (provider == null) return;
+            using var provider = this.CreateProvider(testName) ?? throw new InvalidOperationException($"Failed to create provider for test {testName}");
             
             // Prepare test data
             for (int i = 0; i < recordCount; i++)
@@ -410,8 +406,7 @@ namespace Common.Persistence.Providers.ClusterRegistry.Tests
             const string sharedKey = "shared-product";
             var testName = nameof(Concurrent_Conflicting_Updates_Test);
             this.testNames.Add(testName);
-            using var provider = this.CreateProvider(testName);
-            if (provider == null) return;
+            using var provider = this.CreateProvider(testName) ?? throw new InvalidOperationException($"Failed to create provider for test {testName}");
             
             // Create initial product
             var initialProduct = new Product { Id = sharedKey, Name = "Shared Product", Quantity = 0, Price = 100.0m };
@@ -468,8 +463,7 @@ namespace Common.Persistence.Providers.ClusterRegistry.Tests
             const int operationsPerThread = 100;
             var testName = nameof(Registry_Handle_Limit_Test);
             this.testNames.Add(testName);
-            using var provider = this.CreateProvider(testName);
-            if (provider == null) return;
+            using var provider = this.CreateProvider(testName) ?? throw new InvalidOperationException($"Failed to create provider for test {testName}");
 
             var errors = new ConcurrentBag<Exception>();
             var successCount = 0;
