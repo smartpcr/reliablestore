@@ -17,6 +17,7 @@ namespace Common.Persistence.Providers.ClusterRegistry
     using System.Threading.Tasks;
     using Common.Persistence.Contract;
     using Common.Persistence.Providers.ClusterRegistry.Api;
+    using Common.Persistence.Providers.ClusterRegistry.Registry;
     using Microsoft.Extensions.Logging;
     using Unity;
 
@@ -28,8 +29,7 @@ namespace Common.Persistence.Providers.ClusterRegistry
         private readonly SemaphoreSlim semaphore = new SemaphoreSlim(1, 1);
         private readonly string collectionName;
 
-        private SafeClusterHandle? clusterHandle;
-        private SafeClusterKeyHandle? rootKeyHandle;
+        private IRegistryProvider? registryProvider;
         private bool disposed;
 
         public ClusterRegistryProvider(IServiceProvider serviceProvider, string name)
@@ -54,29 +54,29 @@ namespace Common.Persistence.Providers.ClusterRegistry
         {
             try
             {
-                // Open cluster connection
-                this.clusterHandle = SafeClusterHandle.Open(this.storeSettings.ClusterName);
+                // Create registry provider - will automatically fall back to local registry if cluster is not available
+                this.registryProvider = RegistryProviderFactory.Create(
+                    this.storeSettings.ClusterName,
+                    this.storeSettings.RootPath,
+                    this.logger);
 
-                // Get root registry key
-                this.rootKeyHandle = this.clusterHandle.GetRootKey();
-
-                this.logger.LogInformation("Connected to cluster '{ClusterName}' for entity type {EntityType}",
-                    this.storeSettings.ClusterName ?? "local", typeof(T).Name);
+                this.logger.LogInformation("Initialized {ProviderType} registry provider for entity type {EntityType}",
+                    this.registryProvider.IsCluster ? "cluster" : "local", typeof(T).Name);
             }
             catch (Exception ex)
             {
-                this.logger.LogError(ex, "Failed to initialize cluster connection");
+                this.logger.LogError(ex, "Failed to initialize registry provider");
                 throw;
             }
         }
 
-        private async Task<SafeClusterKeyHandle> GetOrCreateCollectionKeyAsync(CancellationToken cancellationToken)
+        private async Task<IRegistryKey> GetOrCreateCollectionKeyAsync(CancellationToken cancellationToken)
         {
             await this.semaphore.WaitAsync(cancellationToken);
             try
             {
-                var keyPath = $@"{this.storeSettings.RootPath}\{this.storeSettings.ApplicationName}\{this.storeSettings.ServiceName}\{this.collectionName}";
-                return this.OpenOrCreateKey(this.rootKeyHandle!, keyPath);
+                var keyPath = $@"{this.storeSettings.ApplicationName}\{this.storeSettings.ServiceName}\{this.collectionName}";
+                return this.registryProvider!.GetOrCreateKey(keyPath);
             }
             finally
             {
@@ -84,29 +84,6 @@ namespace Common.Persistence.Providers.ClusterRegistry
             }
         }
 
-        private SafeClusterKeyHandle OpenOrCreateKey(SafeClusterKeyHandle parentKey, string keyPath)
-        {
-            var pathParts = keyPath.Split('\\');
-            SafeClusterKeyHandle currentKey = parentKey;
-            bool shouldDisposeCurrentKey = false;
-
-            foreach (var part in pathParts)
-            {
-                if (string.IsNullOrEmpty(part)) continue;
-
-                var newKey = currentKey.CreateOrOpenSubKey(part);
-
-                if (shouldDisposeCurrentKey)
-                {
-                    currentKey.Dispose();
-                }
-
-                currentKey = newKey;
-                shouldDisposeCurrentKey = true;
-            }
-
-            return currentKey;
-        }
 
         protected virtual string CreateKeyHash(string key)
         {
@@ -331,8 +308,7 @@ namespace Common.Persistence.Providers.ClusterRegistry
         {
             if (!this.disposed)
             {
-                this.rootKeyHandle?.Dispose();
-                this.clusterHandle?.Dispose();
+                this.registryProvider?.Dispose();
                 this.semaphore?.Dispose();
                 this.disposed = true;
             }

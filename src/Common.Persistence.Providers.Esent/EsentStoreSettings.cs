@@ -43,5 +43,11 @@ namespace Common.Persistence.Providers.Esent
         /// Gets or sets the page size in KB (must be 2, 4, 8, 16, or 32).
         /// </summary>
         public int PageSizeKB { get; set; } = 8;
+
+        /// <summary>
+        /// Gets or sets whether to use session pooling for improved performance.
+        /// Default is false for backward compatibility.
+        /// </summary>
+        public bool UseSessionPool { get; set; } = false;
     }
 }

@@ -11,6 +11,7 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Database.ManagedEsent" />
+    <PackageReference Include="Microsoft.Extensions.ObjectPool" />
   </ItemGroup>
 
 </Project>
