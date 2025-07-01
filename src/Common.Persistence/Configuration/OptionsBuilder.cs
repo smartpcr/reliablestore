@@ -27,7 +27,11 @@ namespace Common.Persistence.Configuration
         /// <param name="args">Command line arguments</param>
         /// <returns>The IConfiguration instance that was added to the service collection.</returns>
         /// <exception cref="InvalidOperationException">Thrown if the appsettings.json file cannot be found.</exception>
-        public static IConfiguration AddConfiguration(this IServiceCollection services, bool isFunctionApp = false, string[]? args = null)
+        public static IConfiguration AddConfiguration(
+            this IServiceCollection services,
+            Dictionary<string, string>? inMemoryConfig = null,
+            bool isFunctionApp = false,
+            string[]? args = null)
         {
             var baseDirectory = Directory.GetCurrentDirectory();
             var env = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Production";
@@ -98,6 +102,11 @@ namespace Common.Persistence.Configuration
             if (isFunctionApp)
             {
                 configBuilder.AddJsonFile("local.settings.json", optional: true, reloadOnChange: false);
+            }
+
+            if (inMemoryConfig != null)
+            {
+                configBuilder.AddInMemoryCollection(inMemoryConfig!);
             }
 
             configBuilder.AddEnvironmentVariables();

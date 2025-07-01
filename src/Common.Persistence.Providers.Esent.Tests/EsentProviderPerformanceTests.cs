@@ -15,7 +15,7 @@ namespace Common.Persistence.Providers.Esent.Tests
     using Common.Persistence.Configuration;
     using Common.Persistence.Contract;
     using Common.Persistence.Factory;
-    using FluentAssertions;
+    using AwesomeAssertions;
     using Microsoft.Extensions.DependencyInjection;
     using Microsoft.Extensions.Logging;
     using Models;
@@ -26,7 +26,7 @@ namespace Common.Persistence.Providers.Esent.Tests
     {
         private readonly ITestOutputHelper output;
         private readonly IServiceCollection services;
-        private readonly string baseProviderName = "EsentProviderPerfTests";
+        private readonly string providerName = "EsentProviderPerfTests";
         private readonly List<string> tempDatabases = new List<string>();
 
         public EsentProviderPerformanceTests(ITestOutputHelper output)
@@ -42,6 +42,9 @@ namespace Common.Persistence.Providers.Esent.Tests
             // Setup dependency injection
             this.services = new ServiceCollection();
             this.services.AddLogging(builder => builder.AddConsole().SetMinimumLevel(LogLevel.Warning));
+            var configuration = this.services.AddConfiguration();
+            var settings = configuration.GetConfiguredSettings<EsentStoreSettings>(this.providerName);
+            this.services.AddKeyedScoped<CrudStorageProviderSettings>(this.providerName, (_, _) => settings);
             this.services.AddPersistence();
         }
 
@@ -290,20 +293,19 @@ namespace Common.Persistence.Providers.Esent.Tests
 
         private ICrudStorageProvider<Product> CreateProvider(string testName, bool useSessionPool = false)
         {
-            var providerName = $"{this.baseProviderName}_{testName}";
             var dbPath = $"data/test_{testName}.db";
             this.tempDatabases.Add(dbPath);
 
             var settings = new EsentStoreSettings
             {
-                Name = providerName,
+                Name = this.providerName,
                 DatabasePath = dbPath,
                 InstanceName = $"TestInstance_{testName}",
                 UseSessionPool = useSessionPool,
                 Enabled = true
             };
 
-            this.services.AddKeyedScoped<CrudStorageProviderSettings>(providerName, (_, _) => settings);
+            this.services.AddKeyedScoped<CrudStorageProviderSettings>(this.providerName, (_, _) => settings);
             
             var serviceProvider = this.services.BuildServiceProvider();
             var factory = serviceProvider.GetRequiredService<ICrudStorageProviderFactory>();

@@ -15,20 +15,18 @@ namespace Common.Persistence.Providers.ClusterRegistry.Tests
     using Common.Persistence.Configuration;
     using Common.Persistence.Contract;
     using Common.Persistence.Factory;
-    using FluentAssertions;
+    using AwesomeAssertions;
     using Microsoft.Extensions.DependencyInjection;
     using Microsoft.Extensions.Logging;
     using Models;
-    using Xunit;
     using Xunit.Abstractions;
 
-    public class ClusterRegistryProviderPerformanceTests : IDisposable
+    public class ClusterRegistryProviderPerformanceTests
     {
         private readonly ITestOutputHelper output;
         private readonly IServiceCollection services;
-        private readonly string baseProviderName = "ClusterRegistryPerfTests";
-        private readonly List<string> registryPaths = new List<string>();
-        private bool isClusterAvailable;
+        private readonly string providerName = "ClusterRegistryPerfTests";
+        private readonly ClusterRegistryStoreSettings settings;
 
         public ClusterRegistryProviderPerformanceTests(ITestOutputHelper output)
         {
@@ -40,29 +38,18 @@ namespace Common.Persistence.Providers.ClusterRegistry.Tests
                 return;
             }
 
-            // Check if cluster service is available
-            this.isClusterAvailable = CheckClusterAvailability();
-            if (!this.isClusterAvailable)
-            {
-                this.output.WriteLine("Cluster service not available. Tests will be skipped.");
-                return;
-            }
-
             // Setup dependency injection
             this.services = new ServiceCollection();
             this.services.AddLogging(builder => builder.SetMinimumLevel(LogLevel.Warning));
+            var configuration = services.AddConfiguration();
+            this.settings = configuration.GetConfiguredSettings<ClusterRegistryStoreSettings>($"Providers:{this.providerName}");
+            services.AddKeyedSingleton<CrudStorageProviderSettings>(this.providerName, (_, _) => this.settings);
             this.services.AddPersistence();
         }
 
         [WindowsOnlyFact]
         public async Task BulkInsert_Performance_Test()
         {
-            if (!this.isClusterAvailable)
-            {
-                this.output.WriteLine("Skipping test - Cluster service not available");
-                return;
-            }
-
             // Arrange
             const int recordCount = 1000; // Registry has size limits, so we use fewer records
             using var provider = this.CreateProvider(nameof(BulkInsert_Performance_Test));
@@ -91,12 +78,6 @@ namespace Common.Persistence.Providers.ClusterRegistry.Tests
         [WindowsOnlyFact]
         public async Task BulkRead_Performance_Test()
         {
-            if (!this.isClusterAvailable)
-            {
-                this.output.WriteLine("Skipping test - Cluster service not available");
-                return;
-            }
-
             // Arrange
             const int recordCount = 500;
             using var provider = this.CreateProvider(nameof(BulkRead_Performance_Test));
@@ -128,12 +109,6 @@ namespace Common.Persistence.Providers.ClusterRegistry.Tests
         [WindowsOnlyFact]
         public async Task RandomAccess_Performance_Test()
         {
-            if (!this.isClusterAvailable)
-            {
-                this.output.WriteLine("Skipping test - Cluster service not available");
-                return;
-            }
-
             // Arrange
             const int recordCount = 500;
             const int accessCount = 1000;
@@ -171,12 +146,6 @@ namespace Common.Persistence.Providers.ClusterRegistry.Tests
         [WindowsOnlyFact]
         public async Task Update_Performance_Test()
         {
-            if (!this.isClusterAvailable)
-            {
-                this.output.WriteLine("Skipping test - Cluster service not available");
-                return;
-            }
-
             // Arrange
             const int recordCount = 500;
             using var provider = this.CreateProvider(nameof(Update_Performance_Test));
@@ -214,12 +183,6 @@ namespace Common.Persistence.Providers.ClusterRegistry.Tests
         [WindowsOnlyFact]
         public async Task Delete_Performance_Test()
         {
-            if (!this.isClusterAvailable)
-            {
-                this.output.WriteLine("Skipping test - Cluster service not available");
-                return;
-            }
-
             // Arrange
             const int recordCount = 500;
             using var provider = this.CreateProvider(nameof(Delete_Performance_Test));
@@ -253,12 +216,6 @@ namespace Common.Persistence.Providers.ClusterRegistry.Tests
         [WindowsOnlyFact]
         public async Task GetAll_Performance_Test()
         {
-            if (!this.isClusterAvailable)
-            {
-                this.output.WriteLine("Skipping test - Cluster service not available");
-                return;
-            }
-
             // Arrange
             const int recordCount = 500;
             using var provider = this.CreateProvider(nameof(GetAll_Performance_Test));
@@ -286,12 +243,6 @@ namespace Common.Persistence.Providers.ClusterRegistry.Tests
         [WindowsOnlyFact]
         public async Task GetAll_WithPredicate_Performance_Test()
         {
-            if (!this.isClusterAvailable)
-            {
-                this.output.WriteLine("Skipping test - Cluster service not available");
-                return;
-            }
-
             // Arrange
             const int recordCount = 500;
             using var provider = this.CreateProvider(nameof(GetAll_WithPredicate_Performance_Test));
@@ -319,12 +270,6 @@ namespace Common.Persistence.Providers.ClusterRegistry.Tests
         [WindowsOnlyFact]
         public async Task Compression_Performance_Comparison_Test()
         {
-            if (!this.isClusterAvailable)
-            {
-                this.output.WriteLine("Skipping test - Cluster service not available");
-                return;
-            }
-
             // Test with compression disabled
             const int recordCount = 200;
             
@@ -363,22 +308,6 @@ namespace Common.Persistence.Providers.ClusterRegistry.Tests
         {
             try
             {
-                var providerName = $"{this.baseProviderName}_{testName}";
-                var registryPath = $@"Software\Microsoft\ReliableStore\Tests\{testName}";
-                this.registryPaths.Add(registryPath);
-
-                var settings = new ClusterRegistryStoreSettings
-                {
-                    Name = providerName,
-                    RootPath = registryPath,
-                    ApplicationName = "TestApp",
-                    ServiceName = testName,
-                    EnableCompression = enableCompression,
-                    Enabled = true
-                };
-
-                this.services.AddKeyedScoped<CrudStorageProviderSettings>(providerName, (_, _) => settings);
-                
                 var serviceProvider = this.services.BuildServiceProvider();
                 var factory = serviceProvider.GetRequiredService<ICrudStorageProviderFactory>();
                 return factory.Create<Product>(providerName);
@@ -399,41 +328,6 @@ namespace Common.Persistence.Providers.ClusterRegistry.Tests
                 Quantity = i,
                 Price = i * 10.99m
             }).ToList();
-        }
-
-        private static bool CheckClusterAvailability()
-        {
-            try
-            {
-                // Try to access cluster service
-                using var scManager = NativeMethods.OpenSCManager(null, null, NativeMethods.SC_MANAGER_CONNECT);
-                if (scManager.IsInvalid)
-                    return false;
-
-                using var service = NativeMethods.OpenService(scManager, "ClusSvc", NativeMethods.SERVICE_QUERY_STATUS);
-                return !service.IsInvalid;
-            }
-            catch
-            {
-                return false;
-            }
-        }
-
-        public void Dispose()
-        {
-            // Cleanup registry paths
-            if (this.isClusterAvailable)
-            {
-                foreach (var path in this.registryPaths)
-                {
-                    try
-                    {
-                        // Attempt to clean up test registry keys
-                        // Note: This requires appropriate permissions
-                    }
-                    catch { }
-                }
-            }
         }
     }
 }

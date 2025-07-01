@@ -17,20 +17,20 @@ namespace Common.Persistence.Providers.ClusterRegistry.Tests
     using Common.Persistence.Configuration;
     using Common.Persistence.Contract;
     using Common.Persistence.Factory;
-    using FluentAssertions;
+    using AwesomeAssertions;
     using Microsoft.Extensions.DependencyInjection;
     using Microsoft.Extensions.Logging;
     using Models;
-    using Xunit;
     using Xunit.Abstractions;
 
     public class ClusterRegistryProviderConcurrencyTests : IDisposable
     {
         private readonly ITestOutputHelper output;
         private readonly IServiceCollection services;
-        private readonly string baseProviderName = "ClusterRegistryConcurrencyTests";
-        private readonly List<string> registryPaths = new List<string>();
-        private bool isClusterAvailable;
+        private readonly string providerName = "ClusterRegistryConcurrencyTests";
+        private readonly ClusterRegistryStoreSettings settings;
+        private readonly List<string> testNames = new List<string>();
+        private readonly Dictionary<string, IServiceProvider> testServiceProviders = new Dictionary<string, IServiceProvider>();
 
         public ClusterRegistryProviderConcurrencyTests(ITestOutputHelper output)
         {
@@ -42,33 +42,89 @@ namespace Common.Persistence.Providers.ClusterRegistry.Tests
                 return;
             }
 
-            // Check if cluster service is available
-            this.isClusterAvailable = CheckClusterAvailability();
-            if (!this.isClusterAvailable)
-            {
-                this.output.WriteLine("Cluster service not available. Tests will be skipped.");
-                return;
-            }
-
             // Setup dependency injection
             this.services = new ServiceCollection();
             this.services.AddLogging(builder => builder.SetMinimumLevel(LogLevel.Warning));
+            var configuration = services.AddConfiguration();
+            this.settings = configuration.GetConfiguredSettings<ClusterRegistryStoreSettings>($"Providers:{this.providerName}");
+            services.AddKeyedSingleton<CrudStorageProviderSettings>(this.providerName, (_, _) => this.settings);
             this.services.AddPersistence();
+        }
+
+        public void Dispose()
+        {
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                this.CleanupAllTestData();
+            }
+
+            // Dispose all test-specific service providers
+            foreach (var serviceProvider in this.testServiceProviders.Values)
+            {
+                if (serviceProvider is IDisposable disposable)
+                {
+                    disposable.Dispose();
+                }
+            }
+            this.testServiceProviders.Clear();
+        }
+
+        private void CleanupAllTestData()
+        {
+            if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                return;
+            }
+
+            try
+            {
+                // Clean up registry entries for each test
+                foreach (var testName in this.testNames)
+                {
+                    this.CleanupTestData(testName);
+                }
+
+                // Also clean up the root test key if empty
+                using var rootKey = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(this.settings.RootPath, true);
+                if (rootKey != null)
+                {
+                    var subKeyNames = rootKey.GetSubKeyNames();
+                    if (subKeyNames.Length == 0)
+                    {
+                        Microsoft.Win32.Registry.LocalMachine.DeleteSubKey(this.settings.RootPath, false);
+                    }
+                }
+
+            }
+            catch (Exception ex)
+            {
+                this.output?.WriteLine($"Error during cleanup: {ex.Message}");
+            }
+        }
+
+        private void CleanupTestData(string testName)
+        {
+            try
+            {
+                // Clean up the test-specific service name path
+                var testPath = $@"{this.settings.RootPath}\{this.settings.ApplicationName}\{testName}";
+                Microsoft.Win32.Registry.LocalMachine.DeleteSubKeyTree(testPath, false);
+            }
+            catch
+            {
+                // Ignore cleanup errors
+            }
         }
 
         [WindowsOnlyFact]
         public async Task Concurrent_Write_Operations_Test()
         {
-            if (!this.isClusterAvailable)
-            {
-                this.output.WriteLine("Skipping test - Cluster service not available");
-                return;
-            }
-
             // Arrange
             const int threadCount = 5; // Registry has more limited concurrency
             const int operationsPerThread = 20;
-            using var provider = this.CreateProvider(nameof(Concurrent_Write_Operations_Test));
+            var testName = nameof(Concurrent_Write_Operations_Test);
+            this.testNames.Add(testName);
+            using var provider = this.CreateProvider(testName);
             if (provider == null) return;
 
             var errors = new ConcurrentBag<Exception>();
@@ -111,22 +167,21 @@ namespace Common.Persistence.Providers.ClusterRegistry.Tests
 
             this.output.WriteLine($"Concurrent writes: {threadCount} threads × {operationsPerThread} operations = {successCount} successful writes in {stopwatch.ElapsedMilliseconds}ms");
             this.output.WriteLine($"Throughput: {successCount / stopwatch.Elapsed.TotalSeconds:F2} writes/second");
+
+            // Cleanup test data immediately
+            this.CleanupTestData(testName);
         }
 
         [WindowsOnlyFact]
         public async Task Concurrent_Read_Operations_Test()
         {
-            if (!this.isClusterAvailable)
-            {
-                this.output.WriteLine("Skipping test - Cluster service not available");
-                return;
-            }
-
             // Arrange
             const int recordCount = 100;
             const int threadCount = 10;
             const int readsPerThread = 50;
-            using var provider = this.CreateProvider(nameof(Concurrent_Read_Operations_Test));
+            var testName = nameof(Concurrent_Read_Operations_Test);
+            this.testNames.Add(testName);
+            using var provider = this.CreateProvider(testName);
             if (provider == null) return;
             
             // Prepare test data
@@ -176,21 +231,20 @@ namespace Common.Persistence.Providers.ClusterRegistry.Tests
 
             this.output.WriteLine($"Concurrent reads: {threadCount} threads × {readsPerThread} operations = {successCount} successful reads in {stopwatch.ElapsedMilliseconds}ms");
             this.output.WriteLine($"Throughput: {successCount / stopwatch.Elapsed.TotalSeconds:F2} reads/second");
+
+            // Cleanup test data immediately
+            this.CleanupTestData(testName);
         }
 
         [WindowsOnlyFact]
         public async Task Concurrent_Mixed_Operations_Test()
         {
-            if (!this.isClusterAvailable)
-            {
-                this.output.WriteLine("Skipping test - Cluster service not available");
-                return;
-            }
-
             // Arrange
             const int threadCount = 5;
             const int operationsPerThread = 40;
-            using var provider = this.CreateProvider(nameof(Concurrent_Mixed_Operations_Test));
+            var testName = nameof(Concurrent_Mixed_Operations_Test);
+            this.testNames.Add(testName);
+            using var provider = this.CreateProvider(testName);
             if (provider == null) return;
             
             // Prepare some initial data
@@ -279,22 +333,21 @@ namespace Common.Persistence.Providers.ClusterRegistry.Tests
             {
                 this.output.WriteLine($"  {kvp.Key}: {kvp.Value} operations");
             }
+
+            // Cleanup test data immediately
+            this.CleanupTestData(testName);
         }
 
         [WindowsOnlyFact]
         public async Task Concurrent_GetAll_Operations_Test()
         {
-            if (!this.isClusterAvailable)
-            {
-                this.output.WriteLine("Skipping test - Cluster service not available");
-                return;
-            }
-
             // Arrange
             const int recordCount = 100;
             const int threadCount = 3;
             const int operationsPerThread = 10;
-            using var provider = this.CreateProvider(nameof(Concurrent_GetAll_Operations_Test));
+            var testName = nameof(Concurrent_GetAll_Operations_Test);
+            this.testNames.Add(testName);
+            using var provider = this.CreateProvider(testName);
             if (provider == null) return;
             
             // Prepare test data
@@ -343,22 +396,21 @@ namespace Common.Persistence.Providers.ClusterRegistry.Tests
 
             this.output.WriteLine($"Concurrent GetAll operations: {successCount} successful in {stopwatch.ElapsedMilliseconds}ms");
             this.output.WriteLine($"Throughput: {successCount / stopwatch.Elapsed.TotalSeconds:F2} operations/second");
+
+            // Cleanup test data immediately
+            this.CleanupTestData(testName);
         }
 
         [WindowsOnlyFact]
         public async Task Concurrent_Conflicting_Updates_Test()
         {
-            if (!this.isClusterAvailable)
-            {
-                this.output.WriteLine("Skipping test - Cluster service not available");
-                return;
-            }
-
             // Arrange
             const int threadCount = 5;
             const int attemptsPerThread = 20;
             const string sharedKey = "shared-product";
-            using var provider = this.CreateProvider(nameof(Concurrent_Conflicting_Updates_Test));
+            var testName = nameof(Concurrent_Conflicting_Updates_Test);
+            this.testNames.Add(testName);
+            using var provider = this.CreateProvider(testName);
             if (provider == null) return;
             
             // Create initial product
@@ -403,21 +455,20 @@ namespace Common.Persistence.Providers.ClusterRegistry.Tests
             this.output.WriteLine($"Concurrent conflicting updates: {totalUpdates} successful out of {threadCount * attemptsPerThread} attempts in {stopwatch.ElapsedMilliseconds}ms");
             this.output.WriteLine($"Final quantity: {finalProduct!.Quantity}, Final price: {finalProduct.Price:C}");
             this.output.WriteLine($"Success rate: {(double)totalUpdates / (threadCount * attemptsPerThread):P}");
+
+            // Cleanup test data immediately
+            this.CleanupTestData(testName);
         }
 
         [WindowsOnlyFact]
         public async Task Registry_Handle_Limit_Test()
         {
-            if (!this.isClusterAvailable)
-            {
-                this.output.WriteLine("Skipping test - Cluster service not available");
-                return;
-            }
-
             // Registry has handle limits, test behavior under stress
             const int threadCount = 10;
             const int operationsPerThread = 100;
-            using var provider = this.CreateProvider(nameof(Registry_Handle_Limit_Test));
+            var testName = nameof(Registry_Handle_Limit_Test);
+            this.testNames.Add(testName);
+            using var provider = this.CreateProvider(testName);
             if (provider == null) return;
 
             var errors = new ConcurrentBag<Exception>();
@@ -467,73 +518,65 @@ namespace Common.Persistence.Providers.ClusterRegistry.Tests
                     this.output.WriteLine($"  {errorType.Type}: {errorType.Count}");
                 }
             }
+
+            // Cleanup test data immediately
+            this.CleanupTestData(testName);
         }
 
         private ICrudStorageProvider<Product>? CreateProvider(string testName)
         {
             try
             {
-                var providerName = $"{this.baseProviderName}_{testName}";
-                var registryPath = $@"Software\Microsoft\ReliableStore\Tests\{testName}";
-                this.registryPaths.Add(registryPath);
-
-                var settings = new ClusterRegistryStoreSettings
+                // Reuse service provider for the same test name if it exists
+                if (!this.testServiceProviders.TryGetValue(testName, out var serviceProvider))
                 {
-                    Name = providerName,
-                    RootPath = registryPath,
-                    ApplicationName = "TestApp",
-                    ServiceName = testName,
-                    EnableCompression = true,
-                    Enabled = true,
-                    RetryCount = 3,
-                    RetryDelayMilliseconds = 50
-                };
+                    // Create a test-specific configuration to isolate data
+                    var testSpecificServices = new ServiceCollection();
+                    testSpecificServices.AddLogging(builder => builder.SetMinimumLevel(LogLevel.Warning));
+                    // Create test-specific settings with isolated service name
+                    var testSettings = new ClusterRegistryStoreSettings
+                    {
+                        ClusterName = this.settings.ClusterName,
+                        RootPath = this.settings.RootPath,
+                        ApplicationName = this.settings.ApplicationName,
+                        ServiceName = testName, // Use test name as service name for isolation
+                        FallbackToLocalRegistry = this.settings.FallbackToLocalRegistry,
+                        EnableCompression = this.settings.EnableCompression,
+                        MaxValueSizeKB = this.settings.MaxValueSizeKB,
+                        ConnectionTimeoutSeconds = this.settings.ConnectionTimeoutSeconds,
+                        RetryCount = this.settings.RetryCount,
+                        RetryDelayMilliseconds = this.settings.RetryDelayMilliseconds
+                    };
+                    var keyPrefix = $"Providers:{testName}";
+                    // create in-memory configuration for testSettings with keyPrefix for each property
+                    testSpecificServices.AddConfiguration(new Dictionary<string, string>
+                    {
+                        [$"{keyPrefix}:ClusterName"] = testSettings.ClusterName,
+                        [$"{keyPrefix}:RootPath"] = testSettings.RootPath,
+                        [$"{keyPrefix}:ApplicationName"] = testSettings.ApplicationName,
+                        [$"{keyPrefix}:ServiceName"] = testSettings.ServiceName,
+                        [$"{keyPrefix}:FallbackToLocalRegistry"] = testSettings.FallbackToLocalRegistry.ToString(),
+                        [$"{keyPrefix}:EnableCompression"] = testSettings.EnableCompression.ToString(),
+                        [$"{keyPrefix}:MaxValueSizeKB"] = testSettings.MaxValueSizeKB.ToString(),
+                        [$"{keyPrefix}:ConnectionTimeoutSeconds"] = testSettings.ConnectionTimeoutSeconds.ToString(),
+                        [$"{keyPrefix}:RetryCount"] = testSettings.RetryCount.ToString(),
+                        [$"{keyPrefix}:RetryDelayMilliseconds"] = testSettings.RetryDelayMilliseconds.ToString()
+                    });
 
-                this.services.AddKeyedScoped<CrudStorageProviderSettings>(providerName, (_, _) => settings);
+                    testSpecificServices.AddKeyedSingleton<CrudStorageProviderSettings>(testName, (_, _) => testSettings);
+                    testSpecificServices.AddPersistence();
+                    
+                    serviceProvider = testSpecificServices.BuildServiceProvider();
+                    this.testServiceProviders[testName] = serviceProvider;
+                }
                 
-                var serviceProvider = this.services.BuildServiceProvider();
                 var factory = serviceProvider.GetRequiredService<ICrudStorageProviderFactory>();
-                return factory.Create<Product>(providerName);
+                return factory.Create<Product>(testName);
             }
             catch (Exception ex)
             {
                 this.output.WriteLine($"Failed to create provider: {ex.Message}");
                 return null;
-            }
-        }
-
-        private static bool CheckClusterAvailability()
-        {
-            try
-            {
-                // Try to access cluster service
-                using var scManager = NativeMethods.OpenSCManager(null, null, NativeMethods.SC_MANAGER_CONNECT);
-                if (scManager.IsInvalid)
-                    return false;
-
-                using var service = NativeMethods.OpenService(scManager, "ClusSvc", NativeMethods.SERVICE_QUERY_STATUS);
-                return !service.IsInvalid;
-            }
-            catch
-            {
-                return false;
-            }
-        }
-
-        public void Dispose()
-        {
-            // Cleanup registry paths
-            if (this.isClusterAvailable)
-            {
-                foreach (var path in this.registryPaths)
-                {
-                    try
-                    {
-                        // Attempt to clean up test registry keys
-                        // Note: This requires appropriate permissions
-                    }
-                    catch { }
-                }
             }
         }
     }

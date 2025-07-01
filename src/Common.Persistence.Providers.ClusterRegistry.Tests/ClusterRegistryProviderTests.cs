@@ -30,16 +30,17 @@ namespace Common.Persistence.Providers.ClusterRegistry.Tests
         [Fact]
         public void ClusterRegistryStoreSettings_ShouldHaveCorrectDefaults()
         {
-            // Arrange & Act
-            var settings = new ClusterRegistryStoreSettings();
+            var services = new ServiceCollection();
+            var configuration = services.AddConfiguration();
+            var settings = configuration.GetConfiguredSettings<ClusterRegistryStoreSettings>("Providers:TestRegistry");
 
             // Assert
             settings.Name.Should().Be("ClusterRegistry");
             settings.TypeName.Should().Contain("ClusterRegistryProvider");
             settings.AssemblyName.Should().NotBeNullOrEmpty();
             settings.Enabled.Should().BeTrue();
-            settings.ApplicationName.Should().Be("ReliableStore");
-            settings.ServiceName.Should().Be("ClusterRegistry");
+            settings.ApplicationName.Should().Be("TestApp");
+            settings.ServiceName.Should().Be("TestSvc");
             settings.RootPath.Should().Be(@"Software\Microsoft\ReliableStore");
             settings.EnableCompression.Should().BeTrue();
             settings.MaxValueSizeKB.Should().Be(64);
