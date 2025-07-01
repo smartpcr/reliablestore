@@ -239,7 +239,7 @@ namespace Common.Persistence.Benchmarks
             config["Providers:ClusterRegistry:ServiceName"] = $"Benchmark_{Guid.NewGuid():N}";
             config["Providers:ClusterRegistry:FallbackToLocalRegistry"] = "true";
             config["Providers:ClusterRegistry:EnableCompression"] = "true";
-            config["Providers:ClusterRegistry:MaxValueSizeKB"] = "64";
+            config["Providers:ClusterRegistry:MaxValueSizeKB"] = "15360"; // 15 MB
             config["Providers:ClusterRegistry:ConnectionTimeoutSeconds"] = "30";
             config["Providers:ClusterRegistry:RetryCount"] = "3";
             config["Providers:ClusterRegistry:RetryDelayMilliseconds"] = "100";
