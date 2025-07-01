@@ -14,7 +14,7 @@ namespace Common.Persistence.Providers.ClusterRegistry.Tests
     using Common.Persistence.Providers.ClusterRegistry;
     using Common.Persistence.Factory;
     using Common.Persistence.Serialization;
-    using FluentAssertions;
+    using AwesomeAssertions;
     using Microsoft.Extensions.DependencyInjection;
     using Microsoft.Extensions.Logging;
     using Models;
@@ -64,7 +64,8 @@ namespace Common.Persistence.Providers.ClusterRegistry.Tests
 
             var settings = new ClusterRegistryStoreSettings
             {
-                ClusterName = "invalid-cluster-name-that-does-not-exist"
+                ClusterName = "invalid-cluster-name-that-does-not-exist",
+                FallbackToLocalRegistry = false
             };
             
             mockConfigReader.Setup(x => x.ReadSettings<ClusterRegistryStoreSettings>(It.IsAny<string>()))
@@ -75,7 +76,7 @@ namespace Common.Persistence.Providers.ClusterRegistry.Tests
             // Act
             var act = () => new ClusterRegistryProvider<Product>(serviceProvider, "test");
 
-            // Assert - This would fail on a real system but we can't test actual cluster connection in unit tests
+            // Assert - invalid cluster name or cluster not found would fallback to local store
             act.Should().Throw<Exception>();
         }
 
@@ -170,11 +171,6 @@ namespace Common.Persistence.Providers.ClusterRegistry.Tests
             public TestableClusterRegistryProvider(IServiceProvider serviceProvider, string name)
                 : base(serviceProvider, name)
             {
-            }
-
-            protected override void InitializeClusterConnection()
-            {
-                // Skip actual cluster connection for unit tests
             }
 
             public string CreateKeyHashPublic(string key)

@@ -11,7 +11,7 @@ namespace Common.Persistence.Providers.Esent.Tests
     using Common.Persistence.Configuration;
     using Common.Persistence.Contract;
     using Common.Persistence.Factory;
-    using FluentAssertions;
+    using AwesomeAssertions;
     using Microsoft.Extensions.DependencyInjection;
     using Microsoft.Extensions.Logging;
     using Models;

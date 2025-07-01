@@ -9,7 +9,7 @@ namespace Common.Tx.Tests
     using System;
     using System.Threading;
     using System.Threading.Tasks;
-    using FluentAssertions;
+    using AwesomeAssertions;
     using Microsoft.Extensions.Logging;
     using Moq;
     using Xunit;

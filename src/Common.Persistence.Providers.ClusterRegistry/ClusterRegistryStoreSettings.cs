@@ -6,6 +6,7 @@
 
 namespace Common.Persistence.Providers.ClusterRegistry
 {
+    using System.ComponentModel.DataAnnotations;
     using Common.Persistence.Configuration;
 
     public class ClusterRegistryStoreSettings : CrudStorageProviderSettings
@@ -23,16 +24,19 @@ namespace Common.Persistence.Providers.ClusterRegistry
         /// <summary>
         /// Gets or sets the application name for organizing data in cluster registry.
         /// </summary>
-        public string ApplicationName { get; set; } = "ReliableStore";
+        [Required]
+        public string ApplicationName { get; set; }
         
         /// <summary>
         /// Gets or sets the service name for organizing data in cluster registry.
         /// </summary>
-        public string ServiceName { get; set; } = "ClusterRegistry";
+        [Required]
+        public string ServiceName { get; set; }
         
         /// <summary>
         /// Gets or sets the root registry path.
         /// </summary>
+        [Required]
         public string RootPath { get; set; } = @"Software\Microsoft\ReliableStore";
         
         /// <summary>
@@ -59,5 +63,10 @@ namespace Common.Persistence.Providers.ClusterRegistry
         /// Gets or sets the retry delay in milliseconds.
         /// </summary>
         public int RetryDelayMilliseconds { get; set; } = 100;
+
+        /// <summary>
+        /// Gets or sets whether to fallback to local registry if cluster registry is not available.
+        /// </summary>
+        public bool FallbackToLocalRegistry { get; set; } = false;
     }
 }

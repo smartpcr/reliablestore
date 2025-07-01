@@ -10,7 +10,7 @@ namespace Common.Persistence.Providers.Esent.Tests
     using System.IO;
     using System.Runtime.InteropServices;
     using System.Threading.Tasks;
-    using FluentAssertions;
+    using AwesomeAssertions;
     using Models;
     using Xunit;
 

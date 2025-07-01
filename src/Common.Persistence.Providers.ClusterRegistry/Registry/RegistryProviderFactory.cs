@@ -21,7 +21,11 @@ namespace Common.Persistence.Providers.ClusterRegistry.Registry
         /// Creates a registry provider based on availability.
         /// Tries cluster registry first, falls back to local registry if cluster is not available.
         /// </summary>
-        public static IRegistryProvider Create(string? clusterName, string rootPath, ILogger logger)
+        public static IRegistryProvider Create(
+            string? clusterName,
+            string rootPath,
+            bool fallbackToLocal,
+            ILogger logger)
         {
             // Try to create cluster registry provider first
             if (!string.IsNullOrEmpty(clusterName) || IsClusterEnvironment())
@@ -34,7 +38,15 @@ namespace Common.Persistence.Providers.ClusterRegistry.Registry
                 }
                 catch (Exception ex)
                 {
-                    logger.LogWarning(ex, "Failed to create Cluster Registry provider, falling back to local Windows Registry");
+                    if (fallbackToLocal)
+                    {
+                        logger.LogWarning(ex, "Failed to create Cluster Registry provider, falling back to local Windows Registry");
+                    }
+                    else
+                    {
+                        logger.LogError(ex, "Failed to create Cluster Registry provider and fallback to local is disabled");
+                        throw;
+                    }
                 }
             }
 

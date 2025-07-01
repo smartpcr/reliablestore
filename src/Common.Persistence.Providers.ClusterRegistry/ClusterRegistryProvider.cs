@@ -16,7 +16,6 @@ namespace Common.Persistence.Providers.ClusterRegistry
     using System.Threading;
     using System.Threading.Tasks;
     using Common.Persistence.Contract;
-    using Common.Persistence.Providers.ClusterRegistry.Api;
     using Common.Persistence.Providers.ClusterRegistry.Registry;
     using Microsoft.Extensions.Logging;
     using Unity;
@@ -50,7 +49,7 @@ namespace Common.Persistence.Providers.ClusterRegistry
             this.InitializeClusterConnection();
         }
 
-        protected virtual void InitializeClusterConnection()
+        public void InitializeClusterConnection()
         {
             try
             {
@@ -58,6 +57,7 @@ namespace Common.Persistence.Providers.ClusterRegistry
                 this.registryProvider = RegistryProviderFactory.Create(
                     this.storeSettings.ClusterName,
                     this.storeSettings.RootPath,
+                    this.storeSettings.FallbackToLocalRegistry,
                     this.logger);
 
                 this.logger.LogInformation("Initialized {ProviderType} registry provider for entity type {EntityType}",
@@ -85,14 +85,12 @@ namespace Common.Persistence.Providers.ClusterRegistry
         }
 
 
-        protected virtual string CreateKeyHash(string key)
+        protected string CreateKeyHash(string key)
         {
             // Use SHA256 to create a fixed-length key name that's safe for registry
-            using (var sha256 = SHA256.Create())
-            {
-                var hashBytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(key));
-                return Convert.ToBase64String(hashBytes).Replace('/', '_').Replace('+', '-').TrimEnd('=');
-            }
+            using var sha256 = SHA256.Create();
+            var hashBytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(key));
+            return Convert.ToBase64String(hashBytes).Replace('/', '_').Replace('+', '-').TrimEnd('=');
         }
 
         public async Task<T?> GetAsync(string key, CancellationToken cancellationToken = default)

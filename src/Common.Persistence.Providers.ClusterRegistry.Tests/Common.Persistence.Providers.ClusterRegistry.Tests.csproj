@@ -6,4 +6,9 @@
     <ProjectReference Include="..\Common.Persistence.Providers.ClusterRegistry\Common.Persistence.Providers.ClusterRegistry.csproj" />
     <ProjectReference Include="..\poc\Models\Models.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <None Update="appsettings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
 </Project>

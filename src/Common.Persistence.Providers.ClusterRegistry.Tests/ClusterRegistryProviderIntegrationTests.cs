@@ -11,12 +11,10 @@ namespace Common.Persistence.Providers.ClusterRegistry.Tests
     using System.Runtime.Versioning;
     using System.Threading.Tasks;
     using Common.Persistence.Configuration;
-    using Common.Persistence.Contract;
     using Common.Persistence.Factory;
-    using FluentAssertions;
+    using AwesomeAssertions;
     using Microsoft.Extensions.DependencyInjection;
     using Microsoft.Extensions.Logging;
-    using Microsoft.Win32;
     using Models;
     using Xunit;
 
@@ -26,8 +24,9 @@ namespace Common.Persistence.Providers.ClusterRegistry.Tests
     [SupportedOSPlatform("windows")]
     public class ClusterRegistryProviderIntegrationTests : IDisposable
     {
+        private readonly string providerName = "TestRegistry";
         private readonly IServiceProvider serviceProvider;
-        private readonly string testKeyPath = @"Software\Microsoft\ReliableStore\Test";
+        private readonly ClusterRegistryStoreSettings settings;
 
         public ClusterRegistryProviderIntegrationTests()
         {
@@ -37,21 +36,12 @@ namespace Common.Persistence.Providers.ClusterRegistry.Tests
                 var services = new ServiceCollection();
                 services.AddLogging(builder => builder.SetMinimumLevel(LogLevel.Debug));
                 var configuration = services.AddConfiguration();
-
-                // Configure ClusterRegistry provider settings
-                var settings = new ClusterRegistryStoreSettings
-                {
-                    ClusterName = null, // This will force fallback to local registry
-                    RootPath = testKeyPath,
-                    ApplicationName = "TestApp",
-                    ServiceName = "TestService"
-                };
-
-                services.AddKeyedScoped<CrudStorageProviderSettings>("TestProvider", (_, _) => settings);
+                this.settings = configuration.GetConfiguredSettings<ClusterRegistryStoreSettings>($"Providers:{this.providerName}");
+                services.AddKeyedSingleton<CrudStorageProviderSettings>(this.providerName, (_, _) => this.settings);
                 services.AddPersistence();
 
                 this.serviceProvider = services.BuildServiceProvider();
-                
+
                 // Clean up any existing test data
                 this.CleanupTestData();
             }
@@ -67,7 +57,7 @@ namespace Common.Persistence.Providers.ClusterRegistry.Tests
 
             // Arrange
             var factory = this.serviceProvider.GetRequiredService<ICrudStorageProviderFactory>();
-            using var provider = factory.Create<Product>("TestProvider");
+            using var provider = factory.Create<Product>(this.providerName);
 
             var product = new Product
             {
@@ -89,7 +79,7 @@ namespace Common.Persistence.Providers.ClusterRegistry.Tests
             retrieved.Price.Should().Be(product.Price);
 
             // Verify data was written to local registry
-            using var key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey($@"{testKeyPath}\TestApp\TestService\Product");
+            using var key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey($@"{this.settings.RootPath}\{this.settings.ApplicationName}\{this.settings.ServiceName}\Product");
             key.Should().NotBeNull();
             var valueNames = key!.GetValueNames();
             valueNames.Should().ContainSingle();
@@ -105,7 +95,7 @@ namespace Common.Persistence.Providers.ClusterRegistry.Tests
 
             // Arrange
             var factory = this.serviceProvider.GetRequiredService<ICrudStorageProviderFactory>();
-            using var provider = factory.Create<Product>("TestProvider");
+            using var provider = factory.Create<Product>(this.providerName);
 
             var product1 = new Product { Id = "crud-1", Name = "Product 1", Quantity = 5, Price = 10.50m };
             var product2 = new Product { Id = "crud-2", Name = "Product 2", Quantity = 3, Price = 20.75m };
@@ -151,7 +141,7 @@ namespace Common.Persistence.Providers.ClusterRegistry.Tests
                 try
                 {
                     // Delete test registry key if it exists
-                    Microsoft.Win32.Registry.LocalMachine.DeleteSubKeyTree(testKeyPath, false);
+                    Microsoft.Win32.Registry.LocalMachine.DeleteSubKeyTree(this.settings.RootPath, false);
                 }
                 catch
                 {
