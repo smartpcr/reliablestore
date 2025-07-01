@@ -118,7 +118,7 @@ namespace Common.Persistence.Providers.ClusterRegistry.Tests
         public async Task BulkInsert_Performance_Test()
         {
             // Arrange
-            const int recordCount = 1000; // Registry has size limits, so we use fewer records
+            const int recordCount = 10000; // Registry has size limits, so we use fewer records
             var testName = nameof(BulkInsert_Performance_Test);
             this.testNames.Add(testName);
             this.CleanupTestData(testName); // Clean up any existing data before test
@@ -151,7 +151,7 @@ namespace Common.Persistence.Providers.ClusterRegistry.Tests
         public async Task BulkRead_Performance_Test()
         {
             // Arrange
-            const int recordCount = 500;
+            const int recordCount = 5000;
             var testName = nameof(BulkRead_Performance_Test);
             this.testNames.Add(testName);
             this.CleanupTestData(testName); // Clean up any existing data before test
@@ -187,8 +187,8 @@ namespace Common.Persistence.Providers.ClusterRegistry.Tests
         public async Task RandomAccess_Performance_Test()
         {
             // Arrange
-            const int recordCount = 500;
-            const int accessCount = 1000;
+            const int recordCount = 5000;
+            const int accessCount = 10000;
             var testName = nameof(RandomAccess_Performance_Test);
             this.testNames.Add(testName);
             this.CleanupTestData(testName); // Clean up any existing data before test
@@ -229,7 +229,7 @@ namespace Common.Persistence.Providers.ClusterRegistry.Tests
         public async Task Update_Performance_Test()
         {
             // Arrange
-            const int recordCount = 500;
+            const int recordCount = 5000;
             var testName = nameof(Update_Performance_Test);
             this.testNames.Add(testName);
             this.CleanupTestData(testName); // Clean up any existing data before test
@@ -271,7 +271,7 @@ namespace Common.Persistence.Providers.ClusterRegistry.Tests
         public async Task Delete_Performance_Test()
         {
             // Arrange
-            const int recordCount = 500;
+            const int recordCount = 5000;
             var testName = nameof(Delete_Performance_Test);
             this.testNames.Add(testName);
             this.CleanupTestData(testName); // Clean up any existing data before test
@@ -309,7 +309,7 @@ namespace Common.Persistence.Providers.ClusterRegistry.Tests
         public async Task GetAll_Performance_Test()
         {
             // Arrange
-            const int recordCount = 500;
+            const int recordCount = 5000;
             var testName = nameof(GetAll_Performance_Test);
             this.testNames.Add(testName);
             this.CleanupTestData(testName); // Clean up any existing data before test
@@ -341,7 +341,7 @@ namespace Common.Persistence.Providers.ClusterRegistry.Tests
         public async Task GetAll_WithPredicate_Performance_Test()
         {
             // Arrange
-            const int recordCount = 500;
+            const int recordCount = 5000;
             var testName = nameof(GetAll_WithPredicate_Performance_Test);
             this.testNames.Add(testName);
             this.CleanupTestData(testName); // Clean up any existing data before test
@@ -373,7 +373,7 @@ namespace Common.Persistence.Providers.ClusterRegistry.Tests
         public async Task Compression_Performance_Comparison_Test()
         {
             // Test with compression disabled
-            const int recordCount = 200;
+            const int recordCount = 5000;
             var testNameNoComp = nameof(Compression_Performance_Comparison_Test) + "_NoComp";
             var testNameComp = nameof(Compression_Performance_Comparison_Test) + "_Comp";
             this.testNames.Add(testNameNoComp);

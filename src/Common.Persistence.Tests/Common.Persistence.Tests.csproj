@@ -4,4 +4,7 @@
     <ProjectReference Include="..\Common.Persistence.Providers.InMemory\Common.Persistence.Providers.InMemory.csproj" />
     <ProjectReference Include="..\Common.Persistence\Common.Persistence.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging.Console" />
+  </ItemGroup>
 </Project>

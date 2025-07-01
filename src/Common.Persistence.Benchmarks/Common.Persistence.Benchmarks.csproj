@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <AssemblyName>Common.Persistence.Benchmarks</AssemblyName>
+    <RootNamespace>Common.Persistence.Benchmarks</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <Nullable>enable</Nullable>
+    <Configuration>Release</Configuration>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="BenchmarkDotNet" />
+    <PackageReference Include="BenchmarkDotNet.Diagnostics.Windows" Condition="'$(OS)' == 'Windows_NT'" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Common.Persistence\Common.Persistence.csproj" />
+    <ProjectReference Include="..\Common.Persistence.Providers.FileSystem\Common.Persistence.Providers.FileSystem.csproj" />
+    <ProjectReference Include="..\Common.Persistence.Providers.InMemory\Common.Persistence.Providers.InMemory.csproj" />
+    <ProjectReference Include="..\Common.Persistence.Providers.Esent\Common.Persistence.Providers.Esent.csproj" />
+    <ProjectReference Include="..\Common.Persistence.Providers.ClusterRegistry\Common.Persistence.Providers.ClusterRegistry.csproj" />
+    <ProjectReference Include="..\poc\Models\Models.csproj" />
+  </ItemGroup>
+
+</Project>

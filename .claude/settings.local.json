@@ -27,7 +27,12 @@
       "Bash(git commit:*)",
       "Bash(git push:*)",
       "Bash(dotnet publish:*)",
-      "Bash(dotnet sln add:*)"
+      "Bash(dotnet sln add:*)",
+      "Bash(shellcheck:*)",
+      "Bash(dos2unix:*)",
+      "Bash(sed:*)",
+      "Bash(chmod:*)",
+      "Bash(bash:*)"
     ],
     "deny": []
   }
