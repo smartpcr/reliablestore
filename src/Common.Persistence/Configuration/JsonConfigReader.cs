@@ -9,15 +9,18 @@ namespace Common.Persistence.Configuration
     using System;
     using System.Collections.Generic;
     using Common.Persistence.Contract;
+    using Common.Persistence.Factory;
     using Microsoft.Extensions.Configuration;
 
     public class JsonConfigReader : IConfigReader
     {
+        private readonly DIContainerWrapper wrapper;
         private readonly IConfiguration configuration;
 
-        public JsonConfigReader(IConfiguration configuration)
+        public JsonConfigReader(DIContainerWrapper wrapper)
         {
-            this.configuration = configuration;
+            this.wrapper = wrapper;
+            this.configuration = wrapper.Get<IConfiguration>();
         }
 
         public T ReadSettings<T>(string name) where T : class, new()
@@ -38,9 +41,9 @@ namespace Common.Persistence.Configuration
             return ProviderCapability.None;
         }
 
-        public CrudStorageProviderSettings ReadCrudStorageProviderSettings(string name)
+        public CrudStorageProviderSettings GetCrudStorageProviderSettings(string name)
         {
-            var settings = this.configuration.GetSection($"PersistenceProviders:{name}:CrudStorageProvider").Get<CrudStorageProviderSettings>();
+            var settings = this.wrapper.Get<CrudStorageProviderSettings>(name);
             if (settings == null)
             {
                 throw new KeyNotFoundException($"CrudStorageProvider settings for {name} not found.");
@@ -50,7 +53,7 @@ namespace Common.Persistence.Configuration
 
         public IndexingProviderSettings GetIndexProviderSettings(string name)
         {
-            var settings = this.configuration.GetSection($"PersistenceProviders:{name}:IndexingProvider").Get<IndexingProviderSettings>();
+            var settings = this.wrapper.Get<IndexingProviderSettings>(name);
             if (settings == null)
             {
                 throw new KeyNotFoundException($"IndexingProvider settings for {name} not found.");

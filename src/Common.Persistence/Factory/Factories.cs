@@ -36,7 +36,7 @@ namespace Common.Persistence.Factory
 
         public ICrudStorageProvider<T> Create<T>(string name) where T : IEntity
         {
-            var crudProviderSettings = this.configReader.ReadCrudStorageProviderSettings(name);
+            var crudProviderSettings = this.configReader.GetCrudStorageProviderSettings(name);
             var ctor = crudProviderSettings.FindConstructor<T>();
             return this.containerWrapper.TryRegisterAndGetRequired<ICrudStorageProvider<T>>(name, ctor);
         }

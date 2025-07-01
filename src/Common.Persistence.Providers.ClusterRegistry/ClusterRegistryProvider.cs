@@ -10,8 +10,7 @@ namespace Common.Persistence.Providers.ClusterRegistry
     using System.Collections.Generic;
     using System.Linq;
     using System.Linq.Expressions;
-    using System.Runtime.InteropServices;
-    using System.Security.AccessControl;
+    using System.Runtime.Versioning;
     using System.Security.Cryptography;
     using System.Text;
     using System.Threading;
@@ -21,6 +20,7 @@ namespace Common.Persistence.Providers.ClusterRegistry
     using Microsoft.Extensions.Logging;
     using Unity;
 
+    [SupportedOSPlatform("windows")]
     public partial class ClusterRegistryProvider<T> : BaseProvider<T>, ICrudStorageProvider<T>, IDisposable where T : IEntity
     {
         private readonly ClusterRegistryStoreSettings storeSettings;
@@ -50,27 +50,15 @@ namespace Common.Persistence.Providers.ClusterRegistry
             this.InitializeClusterConnection();
         }
 
-        private void InitializeClusterConnection()
+        protected virtual void InitializeClusterConnection()
         {
             try
             {
                 // Open cluster connection
-                var clusterPtr = ClusterApiInterop.OpenCluster(this.storeSettings.ClusterName);
-                if (clusterPtr == IntPtr.Zero)
-                {
-                    throw new InvalidOperationException($"Failed to open cluster '{this.storeSettings.ClusterName ?? "local"}'. Error: {Marshal.GetLastWin32Error()}");
-                }
-
-                this.clusterHandle = new SafeClusterHandle(clusterPtr);
+                this.clusterHandle = SafeClusterHandle.Open(this.storeSettings.ClusterName);
 
                 // Get root registry key
-                var rootKeyPtr = ClusterApiInterop.GetClusterKey(clusterPtr, RegistryRights.FullControl);
-                if (rootKeyPtr == IntPtr.Zero)
-                {
-                    throw new InvalidOperationException($"Failed to get cluster registry root key. Error: {Marshal.GetLastWin32Error()}");
-                }
-
-                this.rootKeyHandle = new SafeClusterKeyHandle(rootKeyPtr);
+                this.rootKeyHandle = this.clusterHandle.GetRootKey();
 
                 this.logger.LogInformation("Connected to cluster '{ClusterName}' for entity type {EntityType}",
                     this.storeSettings.ClusterName ?? "local", typeof(T).Name);
@@ -99,45 +87,28 @@ namespace Common.Persistence.Providers.ClusterRegistry
         private SafeClusterKeyHandle OpenOrCreateKey(SafeClusterKeyHandle parentKey, string keyPath)
         {
             var pathParts = keyPath.Split('\\');
-            var currentKey = parentKey;
+            SafeClusterKeyHandle currentKey = parentKey;
+            bool shouldDisposeCurrentKey = false;
 
             foreach (var part in pathParts)
             {
                 if (string.IsNullOrEmpty(part)) continue;
 
-                var result = ClusterApiInterop.ClusterRegOpenKey(currentKey.DangerousGetHandle(), part, RegistryRights.FullControl, out IntPtr subKeyPtr);
+                var newKey = currentKey.CreateOrOpenSubKey(part);
 
-                if (result != ClusterApiInterop.ERROR_SUCCESS)
-                {
-                    // Key doesn't exist, create it
-                    int disposition;
-                    result = ClusterApiInterop.ClusterRegCreateKey(
-                        currentKey.DangerousGetHandle(),
-                        part,
-                        0,
-                        RegistryRights.FullControl,
-                        IntPtr.Zero,
-                        out subKeyPtr,
-                        out disposition);
-
-                    if (result != ClusterApiInterop.ERROR_SUCCESS)
-                    {
-                        throw new InvalidOperationException($"Failed to create registry key '{part}'. Error: {result}");
-                    }
-                }
-
-                if (currentKey != parentKey)
+                if (shouldDisposeCurrentKey)
                 {
                     currentKey.Dispose();
                 }
 
-                currentKey = new SafeClusterKeyHandle(subKeyPtr);
+                currentKey = newKey;
+                shouldDisposeCurrentKey = true;
             }
 
             return currentKey;
         }
 
-        private string CreateKeyHash(string key)
+        protected virtual string CreateKeyHash(string key)
         {
             // Use SHA256 to create a fixed-length key name that's safe for registry
             using (var sha256 = SHA256.Create())
@@ -156,39 +127,16 @@ namespace Common.Persistence.Providers.ClusterRegistry
                 using var collectionKey = await this.GetOrCreateCollectionKeyAsync(cancellationToken);
                 var hashedKey = this.CreateKeyHash(key);
 
-                // First get the size
-                var dataSize = 0;
-                ClusterRegistryValueType valueType;
-                var result = ClusterApiInterop.ClusterRegQueryValue(
-                    collectionKey,
-                    hashedKey,
-                    out valueType,
-                    IntPtr.Zero,
-                    ref dataSize);
+                // Get the value as string (it's base64 encoded serialized data)
+                var encodedData = collectionKey.GetStringValue(hashedKey);
 
-                if (result == ClusterErrorCode.FileNotFound)
+                if (encodedData == null)
                 {
                     return default(T);
                 }
 
-                if (result != ClusterApiInterop.ERROR_MORE_DATA && result != ClusterApiInterop.ERROR_SUCCESS)
-                {
-                    throw new InvalidOperationException($"Failed to query value size. Error: {result}");
-                }
-
-                // Now get the actual data
-                var data = Marshal.AllocHGlobal(dataSize);
-                result = ClusterApiInterop.ClusterRegQueryValue(
-                    collectionKey,
-                    hashedKey,
-                    out valueType,
-                    data,
-                    ref dataSize);
-
-                if (result != ClusterApiInterop.ERROR_SUCCESS)
-                {
-                    throw new InvalidOperationException($"Failed to read value. Error: {result}");
-                }
+                // Convert from base64 to bytes
+                var data = Convert.FromBase64String(encodedData);
 
                 // Deserialize the data
                 return await this.Serializer.DeserializeAsync(data, cancellationToken);
@@ -212,24 +160,18 @@ namespace Common.Persistence.Providers.ClusterRegistry
                 // Serialize the entity
                 var data = await this.Serializer.SerializeAsync(entity, cancellationToken);
 
-                // Check size limit
-                if (data.Length > this.storeSettings.MaxValueSizeKB * 1024)
+                // Convert to base64 for storage as string
+                var encodedData = Convert.ToBase64String(data);
+
+                // Check size limit (base64 is ~33% larger)
+                var encodedSize = encodedData.Length * sizeof(char);
+                if (encodedSize > this.storeSettings.MaxValueSizeKB * 1024)
                 {
-                    throw new InvalidOperationException($"Value size {data.Length} bytes exceeds maximum {this.storeSettings.MaxValueSizeKB}KB");
+                    throw new InvalidOperationException($"Value size {encodedSize} bytes exceeds maximum {this.storeSettings.MaxValueSizeKB}KB");
                 }
 
                 // Save to registry
-                var result = ClusterApiInterop.ClusterRegSetValue(
-                    collectionKey.DangerousGetHandle(),
-                    hashedKey,
-                    ClusterRegistryValueType.Binary,
-                    data,
-                    data.Length);
-
-                if (result != ClusterApiInterop.ERROR_SUCCESS)
-                {
-                    throw new InvalidOperationException($"Failed to save value. Error: {result}");
-                }
+                collectionKey.SetStringValue(hashedKey, encodedData);
 
                 this.logger.LogDebug("Saved entity with key {Key} to cluster registry", key);
             }
@@ -249,56 +191,28 @@ namespace Common.Persistence.Providers.ClusterRegistry
             {
                 using var collectionKey = await this.GetOrCreateCollectionKeyAsync(cancellationToken);
 
-                int index = 0;
-                while (true)
+                // Enumerate all value names
+                var valueNames = collectionKey.EnumerateValueNames();
+
+                foreach (var valueName in valueNames)
                 {
-                    var valueName = new StringBuilder(256);
-                    int valueNameSize = valueName.Capacity;
-                    ClusterRegistryValueType valueType;
-                    int dataSize = 0;
-
-                    // First enumerate to get value name and size
-                    var result = ClusterApiInterop.ClusterRegEnumValue(
-                        collectionKey.DangerousGetHandle(),
-                        index,
-                        valueName,
-                        ref valueNameSize,
-                        out valueType,
-                        null,
-                        ref dataSize);
-
-                    if (result == ClusterApiInterop.ERROR_NO_MORE_ITEMS)
+                    try
                     {
-                        break;
-                    }
-
-                    if (result != ClusterApiInterop.ERROR_SUCCESS && result != ClusterApiInterop.ERROR_MORE_DATA)
-                    {
-                        throw new InvalidOperationException($"Failed to enumerate values. Error: {result}");
-                    }
-
-                    // Get the actual data
-                    var data = new byte[dataSize];
-                    valueNameSize = valueName.Capacity;
-                    result = ClusterApiInterop.ClusterRegEnumValue(
-                        collectionKey.DangerousGetHandle(),
-                        index,
-                        valueName,
-                        ref valueNameSize,
-                        out valueType,
-                        data,
-                        ref dataSize);
-
-                    if (result == ClusterApiInterop.ERROR_SUCCESS)
-                    {
-                        var entity = await this.Serializer.DeserializeAsync(data, cancellationToken);
-                        if (entity != null && (predicate == null || predicate.Compile()(entity)))
+                        var encodedData = collectionKey.GetStringValue(valueName);
+                        if (encodedData != null)
                         {
-                            results.Add(entity);
+                            var data = Convert.FromBase64String(encodedData);
+                            var entity = await this.Serializer.DeserializeAsync(data, cancellationToken);
+                            if (entity != null && (predicate == null || predicate.Compile()(entity)))
+                            {
+                                results.Add(entity);
+                            }
                         }
                     }
-
-                    index++;
+                    catch (Exception ex)
+                    {
+                        this.logger.LogWarning(ex, "Failed to deserialize value {ValueName}, skipping", valueName);
+                    }
                 }
 
                 return results;
@@ -319,12 +233,7 @@ namespace Common.Persistence.Providers.ClusterRegistry
                 using var collectionKey = await this.GetOrCreateCollectionKeyAsync(cancellationToken);
                 var hashedKey = this.CreateKeyHash(key);
 
-                var result = ClusterApiInterop.ClusterRegDeleteValue(collectionKey.DangerousGetHandle(), hashedKey);
-
-                if (result != ClusterApiInterop.ERROR_SUCCESS && result != ClusterApiInterop.ERROR_FILE_NOT_FOUND)
-                {
-                    throw new InvalidOperationException($"Failed to delete value. Error: {result}");
-                }
+                collectionKey.DeleteValue(hashedKey);
 
                 this.logger.LogDebug("Deleted entity with key {Key} from cluster registry", key);
             }
@@ -344,16 +253,8 @@ namespace Common.Persistence.Providers.ClusterRegistry
                 using var collectionKey = await this.GetOrCreateCollectionKeyAsync(cancellationToken);
                 var hashedKey = this.CreateKeyHash(key);
 
-                int dataSize = 0;
-                ClusterRegistryValueType valueType;
-                var result = ClusterApiInterop.ClusterRegQueryValue(
-                    collectionKey.DangerousGetHandle(),
-                    hashedKey,
-                    out valueType,
-                    null,
-                    ref dataSize);
-
-                return result == ClusterApiInterop.ERROR_SUCCESS || result == ClusterApiInterop.ERROR_MORE_DATA;
+                var value = collectionKey.GetStringValue(hashedKey);
+                return value != null;
             }
             catch (Exception ex)
             {
@@ -402,47 +303,11 @@ namespace Common.Persistence.Providers.ClusterRegistry
                 using var collectionKey = await this.GetOrCreateCollectionKeyAsync(cancellationToken);
 
                 // Get all value names first
-                var valueNames = new List<string>();
-                int index = 0;
+                var valueNames = collectionKey.EnumerateValueNames();
+                count = valueNames.Count;
 
-                while (true)
-                {
-                    var valueName = new StringBuilder(256);
-                    int valueNameSize = valueName.Capacity;
-                    ClusterRegistryValueType valueType;
-                    int dataSize = 0;
-
-                    var result = ClusterApiInterop.ClusterRegEnumValue(
-                        collectionKey.DangerousGetHandle(),
-                        index,
-                        valueName,
-                        ref valueNameSize,
-                        out valueType,
-                        null,
-                        ref dataSize);
-
-                    if (result == ClusterApiInterop.ERROR_NO_MORE_ITEMS)
-                    {
-                        break;
-                    }
-
-                    if (result == ClusterApiInterop.ERROR_SUCCESS || result == ClusterApiInterop.ERROR_MORE_DATA)
-                    {
-                        valueNames.Add(valueName.ToString());
-                    }
-
-                    index++;
-                }
-
-                // Delete all values
-                foreach (var valueName in valueNames)
-                {
-                    var result = ClusterApiInterop.ClusterRegDeleteValue(collectionKey.DangerousGetHandle(), valueName);
-                    if (result == ClusterApiInterop.ERROR_SUCCESS)
-                    {
-                        count++;
-                    }
-                }
+                // Clear all values
+                collectionKey.ClearValues();
 
                 this.logger.LogDebug("Cleared {Count} entities from cluster registry", count);
                 return count;

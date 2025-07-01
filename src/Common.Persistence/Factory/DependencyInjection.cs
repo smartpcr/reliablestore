@@ -16,7 +16,8 @@ namespace Common.Persistence.Factory
     {
         public static IUnityContainer AddPersistence(this IUnityContainer container)
         {
-            container.RegisterType<IConfigReader, JsonConfigReader>();
+            IConfigReader configReader = new JsonConfigReader(new DIContainerWrapper(container));
+            container.RegisterInstance(configReader);
             container.RegisterType<ICrudStorageProviderFactory, CrudStorageProviderFactory>(
                 new InjectionConstructor(
                     new DIContainerWrapper(container),
@@ -51,10 +52,8 @@ namespace Common.Persistence.Factory
 
         public static IServiceCollection AddPersistence(this IServiceCollection services)
         {
-            var serviceProvider = services.BuildServiceProvider();
-            var configuration = serviceProvider.GetRequiredService<IConfiguration>();
-            IConfigReader configReader = new JsonConfigReader(configuration);
-            services.AddSingleton<IConfigReader>(configReader);
+            IConfigReader configReader = new JsonConfigReader(new DIContainerWrapper(services));
+            services.AddSingleton(configReader);
             services.AddSingleton<ICrudStorageProviderFactory>(new CrudStorageProviderFactory(
                 new DIContainerWrapper(services), configReader));
             services.AddSingleton<IIndexingProviderFactory>(new IndexingProviderFactory(

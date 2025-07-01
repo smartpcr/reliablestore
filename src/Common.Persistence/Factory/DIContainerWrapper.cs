@@ -47,6 +47,22 @@ namespace Common.Persistence.Factory
             throw new InvalidOperationException($"Failed to find registration for type '{typeof(T).Name}'");
         }
 
+        public static T Get<T>(this DIContainerWrapper wrapper, string name) where T : class
+        {
+            if (wrapper.Services != null)
+            {
+                var sp = wrapper.Services.BuildServiceProvider();
+                return sp.GetRequiredKeyedService<T>(name);
+            }
+
+            if (wrapper.UnityContainer != null)
+            {
+                return wrapper.UnityContainer.Resolve<T>(name);
+            }
+
+            throw new InvalidOperationException($"Failed to find registration for type '{typeof(T).Name}'");
+        }
+
         public static T TryRegisterAndGetRequired<T>(
             this DIContainerWrapper containerWrapper,
             string name,

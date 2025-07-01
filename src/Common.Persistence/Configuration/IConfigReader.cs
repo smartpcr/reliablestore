@@ -15,7 +15,7 @@ namespace Common.Persistence.Configuration
 
         ProviderCapability GetProviderCapabilities(string name);
 
-        CrudStorageProviderSettings ReadCrudStorageProviderSettings(string name);
+        CrudStorageProviderSettings GetCrudStorageProviderSettings(string name);
 
         IndexingProviderSettings GetIndexProviderSettings(string name);
 

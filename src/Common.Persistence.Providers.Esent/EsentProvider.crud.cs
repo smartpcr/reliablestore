@@ -25,13 +25,8 @@ namespace Common.Persistence.Providers.Esent
         private readonly ILogger<EsentProvider<T>> logger;
         private readonly SemaphoreSlim semaphore = new SemaphoreSlim(1, 1);
         private Instance instance;
-        private Session session;
-        private JET_DBID dbid;
-        private Table table;
-        private JET_COLUMNID keyColumn;
-        private JET_COLUMNID dataColumn;
-        private JET_COLUMNID versionColumn;
         private readonly string tableName;
+        private bool disposed;
 
         public EsentProvider(IServiceProvider serviceProvider, string name)
             : base(serviceProvider, name)
@@ -76,20 +71,28 @@ namespace Common.Persistence.Providers.Esent
                 // Initialize instance
                 this.instance.Init();
 
-                // Create session
-                this.session = new Session(this.instance);
-
                 // Create or open database
-                if (!File.Exists(this.storeSettings.DatabasePath))
+                using (var session = new Session(this.instance))
                 {
-                    Api.JetCreateDatabase(this.session, this.storeSettings.DatabasePath, null, out this.dbid, CreateDatabaseGrbit.OverwriteExisting);
-                    this.CreateTable();
-                }
-                else
-                {
-                    Api.JetAttachDatabase(this.session, this.storeSettings.DatabasePath, AttachDatabaseGrbit.None);
-                    Api.JetOpenDatabase(this.session, this.storeSettings.DatabasePath, null, out this.dbid, OpenDatabaseGrbit.None);
-                    this.OpenTable();
+                    if (!File.Exists(this.storeSettings.DatabasePath))
+                    {
+                        Api.JetCreateDatabase(session, this.storeSettings.DatabasePath, null, out var dbid, CreateDatabaseGrbit.OverwriteExisting);
+                        this.CreateTable(session, dbid);
+                        Api.JetCloseDatabase(session, dbid, CloseDatabaseGrbit.None);
+                    }
+                    else
+                    {
+                        Api.JetAttachDatabase(session, this.storeSettings.DatabasePath, AttachDatabaseGrbit.None);
+                        Api.JetOpenDatabase(session, this.storeSettings.DatabasePath, null, out var dbid, OpenDatabaseGrbit.None);
+                        
+                        // Check if table exists, create if not
+                        if (!this.TableExists(session, dbid))
+                        {
+                            this.CreateTable(session, dbid);
+                        }
+                        
+                        Api.JetCloseDatabase(session, dbid, CloseDatabaseGrbit.None);
+                    }
                 }
 
                 this.logger.LogInformation("ESENT database initialized at {DatabasePath} for entity type {EntityType}",
@@ -98,16 +101,29 @@ namespace Common.Persistence.Providers.Esent
             catch (Exception ex)
             {
                 this.logger.LogError(ex, "Failed to initialize ESENT database");
-                throw;
+                throw new InvalidOperationException($"Failed to initialize ESENT database: {ex.Message}", ex);
             }
         }
 
-        private void CreateTable()
+        private bool TableExists(Session session, JET_DBID dbid)
         {
-            using (var transaction = new Transaction(this.session))
+            try
+            {
+                using var table = new Table(session, dbid, this.tableName, OpenTableGrbit.None);
+                return true;
+            }
+            catch (EsentObjectNotFoundException)
+            {
+                return false;
+            }
+        }
+
+        private void CreateTable(Session session, JET_DBID dbid)
+        {
+            using (var transaction = new Transaction(session))
             {
                 JET_TABLEID tableid;
-                Api.JetCreateTable(this.session, this.dbid, this.tableName, 0, 100, out tableid);
+                Api.JetCreateTable(session, dbid, this.tableName, 0, 100, out tableid);
 
                 // Define columns
                 var keyColumnDef = new JET_COLUMNDEF
@@ -130,54 +146,63 @@ namespace Common.Persistence.Providers.Esent
                 };
 
                 // Create columns
-                Api.JetAddColumn(this.session, tableid, "Key", keyColumnDef, null, 0, out this.keyColumn);
-                Api.JetAddColumn(this.session, tableid, "Data", dataColumnDef, null, 0, out this.dataColumn);
-                Api.JetAddColumn(this.session, tableid, "Version", versionColumnDef, null, 0, out this.versionColumn);
+                JET_COLUMNID keyColumn, dataColumn, versionColumn;
+                Api.JetAddColumn(session, tableid, "Key", keyColumnDef, null, 0, out keyColumn);
+                Api.JetAddColumn(session, tableid, "Data", dataColumnDef, null, 0, out dataColumn);
+                Api.JetAddColumn(session, tableid, "Version", versionColumnDef, null, 0, out versionColumn);
 
                 // Create primary index on Key
                 var primaryIndexDef = "+Key\0\0";
-                Api.JetCreateIndex(this.session, tableid, "PrimaryIndex", CreateIndexGrbit.IndexPrimary | CreateIndexGrbit.IndexUnique,
+                Api.JetCreateIndex(session, tableid, "PrimaryIndex", CreateIndexGrbit.IndexPrimary | CreateIndexGrbit.IndexUnique,
                     primaryIndexDef, primaryIndexDef.Length, 100);
 
-                Api.JetCloseTable(this.session, tableid);
+                Api.JetCloseTable(session, tableid);
                 transaction.Commit(CommitTransactionGrbit.None);
             }
-
-            this.OpenTable();
-        }
-
-        private void OpenTable()
-        {
-            this.table = new Table(this.session, this.dbid, this.tableName, OpenTableGrbit.None);
-
-            // Get column IDs
-            this.keyColumn = Api.GetTableColumnid(this.session, this.table, "Key");
-            this.dataColumn = Api.GetTableColumnid(this.session, this.table, "Data");
-            this.versionColumn = Api.GetTableColumnid(this.session, this.table, "Version");
         }
 
         public async Task<T?> GetAsync(string key, CancellationToken cancellationToken = default)
         {
+            this.ThrowIfDisposed();
+            
             await this.semaphore.WaitAsync(cancellationToken);
             try
             {
+                // ESE operations are synchronous, so run on thread pool
                 return await Task.Run(() =>
                 {
-                    using (var transaction = new Transaction(this.session))
+                    using var session = new Session(this.instance);
+                    Api.JetOpenDatabase(session, this.storeSettings.DatabasePath, null, out var db, OpenDatabaseGrbit.None);
+                    
+                    try
                     {
-                        Api.JetSetCurrentIndex(this.session, this.table, "PrimaryIndex");
-                        Api.MakeKey(this.session, this.table, key, Encoding.Unicode, MakeKeyGrbit.NewKey);
-
-                        if (Api.TrySeek(this.session, this.table, SeekGrbit.SeekEQ))
+                        // Ensure table exists
+                        this.EnsureTableExists(session, db);
+                        
+                        using var transaction = new Transaction(session);
+                        using var table = new Table(session, db, this.tableName, OpenTableGrbit.None);
+                        
+                        var keyColumn = Api.GetTableColumnid(session, table, "Key");
+                        var dataColumn = Api.GetTableColumnid(session, table, "Data");
+                        
+                        Api.JetSetCurrentIndex(session, table, "PrimaryIndex");
+                        Api.MakeKey(session, table, key, Encoding.Unicode, MakeKeyGrbit.NewKey);
+                        
+                        if (Api.TrySeek(session, table, SeekGrbit.SeekEQ))
                         {
-                            var data = Api.RetrieveColumn(this.session, this.table, this.dataColumn);
+                            var data = Api.RetrieveColumn(session, table, dataColumn);
                             if (data != null)
                             {
-                                return this.Serializer.DeserializeAsync(data, cancellationToken).Result;
+                                // Use synchronous deserialization or handle async properly
+                                return this.Serializer.DeserializeAsync(data, cancellationToken).GetAwaiter().GetResult();
                             }
                         }
-
+                        
                         return default(T);
+                    }
+                    finally
+                    {
+                        Api.JetCloseDatabase(session, db, CloseDatabaseGrbit.None);
                     }
                 }, cancellationToken);
             }
@@ -205,6 +230,8 @@ namespace Common.Persistence.Providers.Esent
 
         public async Task<IEnumerable<T>> GetAllAsync(Expression<Func<T, bool>>? predicate = null, CancellationToken cancellationToken = default)
         {
+            this.ThrowIfDisposed();
+            
             await this.semaphore.WaitAsync(cancellationToken);
             try
             {
@@ -212,18 +239,29 @@ namespace Common.Persistence.Providers.Esent
                 {
                     var results = new List<T>();
 
-                    using (var transaction = new Transaction(this.session))
+                    using var session = new Session(this.instance);
+                    Api.JetOpenDatabase(session, this.storeSettings.DatabasePath, null, out var db, OpenDatabaseGrbit.None);
+                    
+                    try
                     {
-                        Api.JetSetCurrentIndex(this.session, this.table, null); // Use primary index
+                        // Ensure table exists
+                        this.EnsureTableExists(session, db);
+                        
+                        using var transaction = new Transaction(session);
+                        using var table = new Table(session, db, this.tableName, OpenTableGrbit.None);
+                        
+                        var dataColumn = Api.GetTableColumnid(session, table, "Data");
+                        
+                        Api.JetSetCurrentIndex(session, table, null); // Use primary index
 
-                        if (Api.TryMoveFirst(this.session, this.table))
+                        if (Api.TryMoveFirst(session, table))
                         {
                             do
                             {
-                                var data = Api.RetrieveColumn(this.session, this.table, this.dataColumn);
+                                var data = Api.RetrieveColumn(session, table, dataColumn);
                                 if (data != null)
                                 {
-                                    var entity = this.Serializer.DeserializeAsync(data, cancellationToken).Result;
+                                    var entity = this.Serializer.DeserializeAsync(data, cancellationToken).GetAwaiter().GetResult();
                                     if (entity != null)
                                     {
                                         if (predicate == null || predicate.Compile()(entity))
@@ -233,11 +271,15 @@ namespace Common.Persistence.Providers.Esent
                                     }
                                 }
                             }
-                            while (Api.TryMoveNext(this.session, this.table));
+                            while (Api.TryMoveNext(session, table));
                         }
+                        
+                        return results;
                     }
-
-                    return results;
+                    finally
+                    {
+                        Api.JetCloseDatabase(session, db, CloseDatabaseGrbit.None);
+                    }
                 }, cancellationToken);
             }
             finally
@@ -248,39 +290,57 @@ namespace Common.Persistence.Providers.Esent
 
         public async Task SaveAsync(string key, T entity, CancellationToken cancellationToken = default)
         {
+            this.ThrowIfDisposed();
+            
             await this.semaphore.WaitAsync(cancellationToken);
             try
             {
                 await Task.Run(async () =>
                 {
-                    using (var transaction = new Transaction(this.session))
+                    using var session = new Session(this.instance);
+                    Api.JetOpenDatabase(session, this.storeSettings.DatabasePath, null, out var db, OpenDatabaseGrbit.None);
+                    
+                    try
                     {
-                        Api.JetSetCurrentIndex(this.session, this.table, "PrimaryIndex");
-                        Api.MakeKey(this.session, this.table, key, Encoding.Unicode, MakeKeyGrbit.NewKey);
+                        // Ensure table exists
+                        this.EnsureTableExists(session, db);
+                        
+                        using var transaction = new Transaction(session);
+                        using var table = new Table(session, db, this.tableName, OpenTableGrbit.None);
+                        
+                        var keyColumn = Api.GetTableColumnid(session, table, "Key");
+                        var dataColumn = Api.GetTableColumnid(session, table, "Data");
+                        
+                        Api.JetSetCurrentIndex(session, table, "PrimaryIndex");
+                        Api.MakeKey(session, table, key, Encoding.Unicode, MakeKeyGrbit.NewKey);
 
                         var data = await this.Serializer.SerializeAsync(entity, cancellationToken);
 
-                        if (Api.TrySeek(this.session, this.table, SeekGrbit.SeekEQ))
+                        if (Api.TrySeek(session, table, SeekGrbit.SeekEQ))
                         {
                             // Update existing record
-                            using (var update = new Update(this.session, this.table, JET_prep.Replace))
+                            using (var update = new Update(session, table, JET_prep.Replace))
                             {
-                                Api.SetColumn(this.session, this.table, this.dataColumn, data);
+                                Api.SetColumn(session, table, dataColumn, data);
                                 update.Save();
                             }
                         }
                         else
                         {
                             // Insert new record
-                            using (var update = new Update(this.session, this.table, JET_prep.Insert))
+                            using (var update = new Update(session, table, JET_prep.Insert))
                             {
-                                Api.SetColumn(this.session, this.table, this.keyColumn, key, Encoding.Unicode);
-                                Api.SetColumn(this.session, this.table, this.dataColumn, data);
+                                Api.SetColumn(session, table, keyColumn, key, Encoding.Unicode);
+                                Api.SetColumn(session, table, dataColumn, data);
                                 update.Save();
                             }
                         }
 
                         transaction.Commit(CommitTransactionGrbit.None);
+                    }
+                    finally
+                    {
+                        Api.JetCloseDatabase(session, db, CloseDatabaseGrbit.None);
                     }
                 }, cancellationToken);
 
@@ -302,22 +362,39 @@ namespace Common.Persistence.Providers.Esent
 
         public async Task DeleteAsync(string key, CancellationToken cancellationToken = default)
         {
+            this.ThrowIfDisposed();
+            
             await this.semaphore.WaitAsync(cancellationToken);
             try
             {
                 await Task.Run(() =>
                 {
-                    using (var transaction = new Transaction(this.session))
+                    using var session = new Session(this.instance);
+                    Api.JetOpenDatabase(session, this.storeSettings.DatabasePath, null, out var db, OpenDatabaseGrbit.None);
+                    
+                    try
                     {
-                        Api.JetSetCurrentIndex(this.session, this.table, "PrimaryIndex");
-                        Api.MakeKey(this.session, this.table, key, Encoding.Unicode, MakeKeyGrbit.NewKey);
+                        // Ensure table exists
+                        this.EnsureTableExists(session, db);
+                        
+                        using var transaction = new Transaction(session);
+                        using var table = new Table(session, db, this.tableName, OpenTableGrbit.None);
+                        
+                        var keyColumn = Api.GetTableColumnid(session, table, "Key");
+                        
+                        Api.JetSetCurrentIndex(session, table, "PrimaryIndex");
+                        Api.MakeKey(session, table, key, Encoding.Unicode, MakeKeyGrbit.NewKey);
 
-                        if (Api.TrySeek(this.session, this.table, SeekGrbit.SeekEQ))
+                        if (Api.TrySeek(session, table, SeekGrbit.SeekEQ))
                         {
-                            Api.JetDelete(this.session, this.table);
+                            Api.JetDelete(session, table);
                             transaction.Commit(CommitTransactionGrbit.None);
                             this.logger.LogDebug("Deleted entity with key {Key} from ESENT database", key);
                         }
+                    }
+                    finally
+                    {
+                        Api.JetCloseDatabase(session, db, CloseDatabaseGrbit.None);
                     }
                 }, cancellationToken);
             }
@@ -329,16 +406,31 @@ namespace Common.Persistence.Providers.Esent
 
         public async Task<bool> ExistsAsync(string key, CancellationToken cancellationToken = default)
         {
+            this.ThrowIfDisposed();
+            
             await this.semaphore.WaitAsync(cancellationToken);
             try
             {
                 return await Task.Run(() =>
                 {
-                    using (var transaction = new Transaction(this.session))
+                    using var session = new Session(this.instance);
+                    Api.JetOpenDatabase(session, this.storeSettings.DatabasePath, null, out var db, OpenDatabaseGrbit.None);
+                    
+                    try
                     {
-                        Api.JetSetCurrentIndex(this.session, this.table, "PrimaryIndex");
-                        Api.MakeKey(this.session, this.table, key, Encoding.Unicode, MakeKeyGrbit.NewKey);
-                        return Api.TrySeek(this.session, this.table, SeekGrbit.SeekEQ);
+                        // Ensure table exists
+                        this.EnsureTableExists(session, db);
+                        
+                        using var transaction = new Transaction(session);
+                        using var table = new Table(session, db, this.tableName, OpenTableGrbit.None);
+                        
+                        Api.JetSetCurrentIndex(session, table, "PrimaryIndex");
+                        Api.MakeKey(session, table, key, Encoding.Unicode, MakeKeyGrbit.NewKey);
+                        return Api.TrySeek(session, table, SeekGrbit.SeekEQ);
+                    }
+                    finally
+                    {
+                        Api.JetCloseDatabase(session, db, CloseDatabaseGrbit.None);
                     }
                 }, cancellationToken);
             }
@@ -354,29 +446,60 @@ namespace Common.Persistence.Providers.Esent
             return entities.Count();
         }
 
-        public Task<long> ClearAsync(CancellationToken cancellationToken = default)
+        public async Task<long> ClearAsync(CancellationToken cancellationToken = default)
         {
-            return Task.Run(() =>
+            this.ThrowIfDisposed();
+            
+            await this.semaphore.WaitAsync(cancellationToken);
+            try
             {
-                this.semaphore.Wait(cancellationToken);
-                try
+                return await Task.Run(() =>
                 {
-                    int totalRecords;
-                    using (var transaction = new Transaction(this.session))
+                    using var session = new Session(this.instance);
+                    Api.JetOpenDatabase(session, this.storeSettings.DatabasePath, null, out var db, OpenDatabaseGrbit.None);
+                    
+                    try
                     {
-                        Api.JetIndexRecordCount(this.session, this.table, out totalRecords, 1000);
-                        Api.JetSetCurrentIndex(this.session, this.table, null); // Use primary index
-                        Api.JetDeleteTable(this.session, this.dbid, this.table.Name);
-                        transaction.Commit(CommitTransactionGrbit.None);
+                        // Ensure table exists before trying to clear it
+                        this.EnsureTableExists(session, db);
+                        
+                        long count = 0;
+                        using (var transaction = new Transaction(session))
+                        {
+                            using (var table = new Table(session, db, this.tableName, OpenTableGrbit.None))
+                            {
+                                // Count records before deletion
+                                if (Api.TryMoveFirst(session, table))
+                                {
+                                    do
+                                    {
+                                        count++;
+                                    }
+                                    while (Api.TryMoveNext(session, table));
+                                }
+                            }
+                            
+                            // Delete and recreate the table
+                            Api.JetDeleteTable(session, db, this.tableName);
+                            transaction.Commit(CommitTransactionGrbit.None);
+                        }
+                        
+                        // Recreate the table
+                        this.CreateTable(session, db);
+                        
+                        this.logger.LogDebug("Cleared {Count} entities from ESENT database", count);
+                        return count;
                     }
-                    this.logger.LogDebug("Cleared all entities from ESENT database");
-                    return (long)totalRecords; // Return 0 as the count after clearing
-                }
-                finally
-                {
-                    this.semaphore.Release();
-                }
-            }, cancellationToken);
+                    finally
+                    {
+                        Api.JetCloseDatabase(session, db, CloseDatabaseGrbit.None);
+                    }
+                }, cancellationToken);
+            }
+            finally
+            {
+                this.semaphore.Release();
+            }
         }
 
         private void EnsureDirectoryExists()
@@ -389,12 +512,48 @@ namespace Common.Persistence.Providers.Esent
             }
         }
 
+        private void EnsureTableExists(Session session, JET_DBID dbid)
+        {
+            if (!this.TableExists(session, dbid))
+            {
+                this.logger.LogDebug("Table {TableName} does not exist, creating it", this.tableName);
+                this.CreateTable(session, dbid);
+            }
+        }
+
+        private void ThrowIfDisposed()
+        {
+            if (this.disposed)
+            {
+                throw new ObjectDisposedException(nameof(EsentProvider<T>));
+            }
+        }
+
         public void Dispose()
         {
-            this.table?.Dispose();
-            this.session?.Dispose();
-            this.instance?.Dispose();
-            this.semaphore?.Dispose();
+            if (!this.disposed)
+            {
+                if (this.instance != null)
+                {
+                    try
+                    {
+                        // Detach database before disposing instance
+                        using (var session = new Session(this.instance))
+                        {
+                            Api.JetDetachDatabase(session, this.storeSettings.DatabasePath);
+                        }
+                    }
+                    catch
+                    {
+                        // Ignore errors during cleanup
+                    }
+                    
+                    this.instance.Dispose();
+                }
+                
+                this.semaphore?.Dispose();
+                this.disposed = true;
+            }
         }
     }
 }

@@ -24,14 +24,14 @@ The **EntityStore** is a persistence abstraction layer that provides a unified i
                                       │
 ┌─────────────────────────────────────▼───────────────────────┐
 │                 EntityStore Contract                        │
-│  IEntityStoreX<TEntity,TKey>  │  ITransactionX             │
-│  IEntityTransactionX          │  IEntityX<TKey>            │
+│  IEntityStoreX<TEntity,TKey>  │  ITransactionX              │
+│  IEntityTransactionX          │  IEntityX<TKey>             │
 └─────────────────────────────────────┬───────────────────────┘
                                       │
 ┌─────────────────────────────────────▼───────────────────────┐
 │               Implementation Layer                          │
 │  ┌─────────────────────┐    ┌─────────────────────────────┐ │
-│  │   KVS Backend       │    │ ReliableCollections Backend│ │
+│  │   KVS Backend       │    │ ReliableCollections Backend │ │
 │  │  - EntityStoreX     │    │  - EntityStoreX             │ │
 │  │  - TransactionX     │    │  - TransactionX             │ │
 │  │  - Binary Storage   │    │  - Typed Objects            │ │

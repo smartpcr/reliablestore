@@ -242,5 +242,10 @@ namespace Common.Persistence.Providers.FileSystem
                 this.logger.LogDebug("Created directory {Directory}", directory);
             }
         }
+
+        public void Dispose()
+        {
+            this.semaphore.Dispose();
+        }
     }
 }

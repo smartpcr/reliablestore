@@ -8,6 +8,7 @@ namespace Common.Persistence.Providers.Esent.Tests
 {
     using System;
     using System.IO;
+    using System.Runtime.InteropServices;
     using System.Threading.Tasks;
     using FluentAssertions;
     using Models;
@@ -21,6 +22,12 @@ namespace Common.Persistence.Providers.Esent.Tests
 
         public EsentProviderSimpleTests()
         {
+            // Skip initialization on non-Windows platforms
+            if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                return;
+            }
+
             // Create a unique test directory for each test
             this.testDirectory = Path.Combine(Path.GetTempPath(), "EsentTests", Guid.NewGuid().ToString());
             this.testDatabasePath = Path.Combine(this.testDirectory, "test.db");
@@ -36,9 +43,10 @@ namespace Common.Persistence.Providers.Esent.Tests
             this.provider = new SimpleEsentProvider<Product>(settings);
         }
 
-        [Fact]
+        [WindowsOnlyFact]
         public async Task SaveAndGetAsync_ShouldWorkCorrectly()
         {
+            if (this.provider == null) return; // Skip if not initialized
             // Arrange
             var product = new Product
             {
@@ -59,9 +67,10 @@ namespace Common.Persistence.Providers.Esent.Tests
             retrieved.Price.Should().Be(product.Price);
         }
 
-        [Fact]
+        [WindowsOnlyFact]
         public async Task ExistsAsync_ShouldReturnTrueForExistingEntity()
         {
+            if (this.provider == null) return; // Skip if not initialized
             // Arrange
             var product = new Product
             {
@@ -79,9 +88,10 @@ namespace Common.Persistence.Providers.Esent.Tests
             exists.Should().BeTrue();
         }
 
-        [Fact]
+        [WindowsOnlyFact]
         public async Task ExistsAsync_ShouldReturnFalseForNonExistentEntity()
         {
+            if (this.provider == null) return; // Skip if not initialized
             // Act
             var exists = await this.provider.ExistsAsync("non-existent-id");
 
@@ -92,7 +102,7 @@ namespace Common.Persistence.Providers.Esent.Tests
         public void Dispose()
         {
             this.provider?.Dispose();
-            
+
             // Clean up test files
             if (Directory.Exists(this.testDirectory))
             {

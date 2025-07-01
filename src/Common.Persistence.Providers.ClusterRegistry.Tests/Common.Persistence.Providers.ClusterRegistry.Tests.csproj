@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Common.Persistence.Providers.ClusterRegistry\Common.Persistence.Providers.ClusterRegistry.csproj" />
+    <ProjectReference Include="..\poc\Models\Models.csproj" />
+  </ItemGroup>
+</Project>

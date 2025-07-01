@@ -15,7 +15,7 @@ namespace Common.Persistence.Contract
     /// <summary>
     /// CRUD and batch operations for a storage provider.
     /// </summary>
-    public interface ICrudStorageProvider<T> where T : IEntity
+    public interface ICrudStorageProvider<T> : IDisposable where T : IEntity
     {
         Task<T?> GetAsync(string key, CancellationToken cancellationToken = default);
         Task<IEnumerable<T>> GetManyAsync(IEnumerable<string> keys, CancellationToken cancellationToken = default);
