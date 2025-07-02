@@ -97,6 +97,7 @@ BenchmarkDotNet generates detailed reports including:
 ![Benchmark results1](./BenchmarkDotNet.Artifacts/results/benchmark1.png)
 ![Benchmark Results](./BenchmarkDotNet.Artifacts/results/benchmark.png)
 
+
 Here’s the high-level take-away from the full benchmark:
 
 1. In-Memory provider
