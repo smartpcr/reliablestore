@@ -22,8 +22,8 @@ namespace Common.Persistence.Benchmarks
     using Common.Persistence.Factory;
     using Common.Persistence.Providers.Esent;
     using Common.Persistence.Providers.ClusterRegistry;
+    using Common.Persistence.Providers.FileSystem;
     using Common.Persistence.Providers.InMemory;
-    using Microsoft.Extensions.Configuration;
     using Microsoft.Extensions.DependencyInjection;
     using Microsoft.Extensions.Logging;
     using Models;
@@ -39,14 +39,29 @@ namespace Common.Persistence.Benchmarks
         private ICrudStorageProvider<Product> provider;
         private string tempDirectory;
 
-        [Params(1000)]
+        public enum ProviderTypes
+        {
+            InMemory,
+            FileSystem,
+            Esent,
+            ClusterRegistry
+        }
+
+        public enum PayloadSizes
+        {
+            Small,
+            Medium,
+            Large
+        }
+
+        [Params(200)]
         public int OperationCount { get; set; }
 
-        [Params("Small", "Medium", "Large", "ExtraLarge")]
-        public string PayloadSize { get; set; }
+        [Params(PayloadSizes.Small, PayloadSizes.Medium, PayloadSizes.Large)]
+        public PayloadSizes PayloadSize { get; set; }
 
-        [Params("Esent", "ClusterRegistry")]
-        public string ProviderType { get; set; }
+        [Params(ProviderTypes.InMemory, ProviderTypes.FileSystem, ProviderTypes.Esent, ProviderTypes.ClusterRegistry)]
+        public ProviderTypes ProviderType { get; set; }
 
         [Params(8, 16)]
         public int CoreCount { get; set; }
@@ -56,7 +71,7 @@ namespace Common.Persistence.Benchmarks
         {
             // Skip non-Windows providers on non-Windows platforms
             if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows) &&
-                (ProviderType == "Esent" || ProviderType == "ClusterRegistry"))
+                (ProviderType == ProviderTypes.Esent || ProviderType == ProviderTypes.ClusterRegistry))
             {
                 return;
             }
@@ -71,7 +86,11 @@ namespace Common.Persistence.Benchmarks
 
             // Add configuration
             var configuration = services.AddConfiguration(this.GetProviderConfiguration());
-            var esentSettings = configuration.GetConfiguredSettings<EsentStoreSettings>($"Providers:Esent");
+            var inMemorySettings = configuration.GetConfiguredSettings<InMemoryStoreSettings>("Providers:InMemory");
+            services.AddKeyedSingleton<CrudStorageProviderSettings>("InMemory", (_, _) => inMemorySettings);
+            var fileSystemSettings = configuration.GetConfiguredSettings<FileSystemStoreSettings>("Providers:FileSystem");
+            services.AddKeyedSingleton<CrudStorageProviderSettings>("FileSystem", (_, _) => fileSystemSettings);
+            var esentSettings = configuration.GetConfiguredSettings<EsentStoreSettings>("Providers:Esent");
             services.AddKeyedSingleton<CrudStorageProviderSettings>("Esent", (_, _) => esentSettings);
             var clusterRegistrySettings = configuration.GetConfiguredSettings<ClusterRegistryStoreSettings>($"Providers:ClusterRegistry");
             services.AddKeyedSingleton<CrudStorageProviderSettings>("ClusterRegistry", (_, _) => clusterRegistrySettings);
@@ -86,7 +105,8 @@ namespace Common.Persistence.Benchmarks
 
             // Create provider
             var factory = serviceProvider.GetRequiredService<ICrudStorageProviderFactory>();
-            provider = factory.Create<Product>(ProviderType);
+            var providerName = this.ProviderType.ToString();
+            provider = factory.Create<Product>(providerName);
 
             // Set CPU affinity
             SetCpuAffinity(CoreCount);
@@ -113,7 +133,7 @@ namespace Common.Persistence.Benchmarks
             }
 
             // Cleanup registry for ClusterRegistry provider
-            if (ProviderType == "ClusterRegistry" && RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            if (ProviderType == ProviderTypes.ClusterRegistry && RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
                 try
                 {
@@ -220,7 +240,7 @@ namespace Common.Persistence.Benchmarks
 
             // FileSystem provider config
             config["Providers:FileSystem:Name"] = "FileSystem";
-            config["Providers:FileSystem:RootPath"] = Path.Combine(tempDirectory, "FileSystem");
+            config["Providers:FileSystem:FolderPath"] = Path.Combine(tempDirectory, "FileSystem");
             config["Providers:FileSystem:Enabled"] = "true";
 
             // ESENT provider config
@@ -238,7 +258,7 @@ namespace Common.Persistence.Benchmarks
             config["Providers:ClusterRegistry:ServiceName"] = $"Benchmark_{Guid.NewGuid():N}";
             config["Providers:ClusterRegistry:FallbackToLocalRegistry"] = "true";
             config["Providers:ClusterRegistry:EnableCompression"] = "true";
-            config["Providers:ClusterRegistry:MaxValueSizeKB"] = "15360"; // 15 MB
+            config["Providers:ClusterRegistry:MaxValueSizeKB"] = "46080"; // 45 MB
             config["Providers:ClusterRegistry:ConnectionTimeoutSeconds"] = "30";
             config["Providers:ClusterRegistry:RetryCount"] = "3";
             config["Providers:ClusterRegistry:RetryDelayMilliseconds"] = "100";
@@ -247,15 +267,14 @@ namespace Common.Persistence.Benchmarks
             return config;
         }
 
-        private List<Product> GenerateTestData(int count, string payloadSize)
+        private List<Product> GenerateTestData(int count, PayloadSizes payloadSize)
         {
             var products = new List<Product>(count);
             var descriptionSize = payloadSize switch
             {
-                "Small" => 1000,      // ~1 KB
-                "Medium" => 10_000,    // ~10 KB
-                "Large" => 100_000,    // ~100 KB
-                "ExtraLarge" => 16_000_000, // ~16 MB
+                PayloadSizes.Small => 1000,      // ~1 KB
+                PayloadSizes.Medium => 100_000,    // ~100 KB
+                PayloadSizes.Large => 5_000_000, // ~5 MB
                 _ => 1000
             };
 
