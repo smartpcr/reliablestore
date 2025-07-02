@@ -18,7 +18,6 @@ namespace Common.Persistence.Benchmarks
     using BenchmarkDotNet.Diagnosers;
     using BenchmarkDotNet.Engines;
     using BenchmarkDotNet.Jobs;
-    using BenchmarkDotNet.Toolchains.InProcess.NoEmit;
     using Common.Persistence.Configuration;
     using Common.Persistence.Contract;
     using Common.Persistence.Factory;
@@ -299,9 +298,9 @@ namespace Common.Persistence.Benchmarks
                 AddDiagnoser(MemoryDiagnoser.Default);
                 AddDiagnoser(ThreadingDiagnoser.Default);
                 
-                // Use InProcessNoEmitToolchain for better compatibility
+                // Use default toolchain (out-of-process) for long-running benchmarks
+                // This avoids timeout issues with ESENT provider
                 AddJob(Job.Default
-                    .WithToolchain(InProcessNoEmitToolchain.Instance)
                     .WithStrategy(RunStrategy.Throughput));
             }
         }

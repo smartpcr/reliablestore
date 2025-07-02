@@ -17,7 +17,6 @@ namespace Common.Persistence.Benchmarks
     using BenchmarkDotNet.Diagnosers;
     using BenchmarkDotNet.Engines;
     using BenchmarkDotNet.Jobs;
-    using BenchmarkDotNet.Toolchains.InProcess.NoEmit;
     using Common.Persistence.Configuration;
     using Common.Persistence.Contract;
     using Common.Persistence.Factory;
@@ -40,7 +39,7 @@ namespace Common.Persistence.Benchmarks
         private ICrudStorageProvider<Product> provider;
         private string tempDirectory;
 
-        [Params(1000, 10000, 100000)]
+        [Params(1000, 10000)]
         public int OperationCount { get; set; }
 
         [Params("Small", "Medium", "Large")]
@@ -49,14 +48,14 @@ namespace Common.Persistence.Benchmarks
         [Params("Esent", "ClusterRegistry")]
         public string ProviderType { get; set; }
 
-        [Params(2, 4, 8, 16)]
+        [Params(8, 16)]
         public int CoreCount { get; set; }
 
         [GlobalSetup]
         public void GlobalSetup()
         {
             // Skip non-Windows providers on non-Windows platforms
-            if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows) && 
+            if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows) &&
                 (ProviderType == "Esent" || ProviderType == "ClusterRegistry"))
             {
                 return;
@@ -69,7 +68,7 @@ namespace Common.Persistence.Benchmarks
             // Setup DI container
             var services = new ServiceCollection();
             services.AddLogging(builder => builder.SetMinimumLevel(LogLevel.Warning));
-            
+
             // Add configuration
             var configuration = services.AddConfiguration(this.GetProviderConfiguration());
             var esentSettings = configuration.GetConfiguredSettings<EsentStoreSettings>($"Providers:Esent");
@@ -97,7 +96,7 @@ namespace Common.Persistence.Benchmarks
         public void GlobalCleanup()
         {
             provider?.Dispose();
-            
+
             if (serviceProvider is IDisposable disposable)
             {
                 disposable.Dispose();
@@ -164,7 +163,7 @@ namespace Common.Persistence.Benchmarks
             for (int i = 0; i < testData.Count; i++)
             {
                 var operation = random.Next(100);
-                
+
                 if (operation < 70) // 70% reads
                 {
                     var index = random.Next(initialCount);
@@ -187,7 +186,7 @@ namespace Common.Persistence.Benchmarks
         public async Task BatchOperations()
         {
             const int batchSize = 100;
-            
+
             // Process in batches
             for (int i = 0; i < testData.Count; i += batchSize)
             {
@@ -293,10 +292,10 @@ namespace Common.Persistence.Benchmarks
             {
                 AddDiagnoser(MemoryDiagnoser.Default);
                 AddDiagnoser(ThreadingDiagnoser.Default);
-                
-                // Use InProcessNoEmitToolchain for better compatibility
+
+                // Use default toolchain (out-of-process) for long-running benchmarks
+                // This avoids timeout issues with ESENT provider
                 AddJob(Job.Default
-                    .WithToolchain(InProcessNoEmitToolchain.Instance)
                     .WithStrategy(RunStrategy.Throughput));
             }
         }
