@@ -32,7 +32,8 @@
       "Bash(dos2unix:*)",
       "Bash(sed:*)",
       "Bash(chmod:*)",
-      "Bash(bash:*)"
+      "Bash(bash:*)",
+      "WebFetch(domain:learn.microsoft.com)"
     ],
     "deny": []
   }
