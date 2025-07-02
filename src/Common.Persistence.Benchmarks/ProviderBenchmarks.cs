@@ -39,10 +39,10 @@ namespace Common.Persistence.Benchmarks
         private ICrudStorageProvider<Product> provider;
         private string tempDirectory;
 
-        [Params(1000, 10000)]
+        [Params(1000)]
         public int OperationCount { get; set; }
 
-        [Params("Small", "Medium", "Large")]
+        [Params("Small", "Medium", "Large", "ExtraLarge")]
         public string PayloadSize { get; set; }
 
         [Params("Esent", "ClusterRegistry")]
@@ -253,8 +253,9 @@ namespace Common.Persistence.Benchmarks
             var descriptionSize = payloadSize switch
             {
                 "Small" => 1000,      // ~1 KB
-                "Medium" => 10000,    // ~10 KB
-                "Large" => 100000,    // ~100 KB
+                "Medium" => 10_000,    // ~10 KB
+                "Large" => 100_000,    // ~100 KB
+                "ExtraLarge" => 16_000_000, // ~16 MB
                 _ => 1000
             };
 

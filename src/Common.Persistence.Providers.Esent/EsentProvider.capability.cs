@@ -9,7 +9,7 @@ namespace Common.Persistence.Providers.Esent
     using System;
     using Common.Persistence.Contract;
 
-    public partial class EsentProvider<T> : BaseProvider<T>, IPersistenceProvider<T>, IDisposable where T : IEntity
+    public partial class EsentProvider<T> : BaseProvider<T>, IPersistenceProvider<T> where T : IEntity
     {
     }
 }

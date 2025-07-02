@@ -15,26 +15,44 @@ namespace Common.Persistence.Providers.InMemory
     using System.Threading.Tasks;
     using Common.Persistence.Contract;
     using Microsoft.Extensions.Logging;
+    using Unity;
 
-    public class InMemoryProvider<T> : ICrudStorageProvider<T> where T : IEntity
+    public partial class InMemoryProvider<T> : ICrudStorageProvider<T> where T : IEntity
     {
         private readonly ConcurrentDictionary<string, CacheEntry<T>> cache;
-        private readonly InMemoryOptions options;
+        private readonly InMemoryStoreSettings settings;
         private readonly ILogger<InMemoryProvider<T>> logger;
         private readonly Timer? evictionTimer;
 
-        public InMemoryProvider(InMemoryOptions options, ILogger<InMemoryProvider<T>> logger)
+        public InMemoryProvider(IServiceProvider serviceProvider, string name)
+            : base(serviceProvider, name)
         {
-            this.options = options;
-            this.logger = logger;
+            this.settings = this.ConfigReader.ReadSettings<InMemoryStoreSettings>(name);
+            this.logger = this.GetLogger<InMemoryProvider<T>>();
             this.cache = new ConcurrentDictionary<string, CacheEntry<T>>();
 
-            if (this.options.EnableEviction)
+            if (this.settings.EnableEviction)
             {
                 this.evictionTimer = new Timer(this.PerformEviction,
                     null,
-                    this.options.EvictionInterval,
-                    this.options.EvictionInterval);
+                    this.settings.EvictionInterval,
+                    this.settings.EvictionInterval);
+            }
+        }
+
+        public InMemoryProvider(UnityContainer container, string name)
+            : base(container, name)
+        {
+            this.settings = this.ConfigReader.ReadSettings<InMemoryStoreSettings>(name);
+            this.logger = this.GetLogger<InMemoryProvider<T>>();
+            this.cache = new ConcurrentDictionary<string, CacheEntry<T>>();
+
+            if (this.settings.EnableEviction)
+            {
+                this.evictionTimer = new Timer(this.PerformEviction,
+                    null,
+                    this.settings.EvictionInterval,
+                    this.settings.EvictionInterval);
             }
         }
 
@@ -42,7 +60,7 @@ namespace Common.Persistence.Providers.InMemory
         {
             if (this.cache.TryGetValue(key, out var entry))
             {
-                if (!entry.IsExpired(this.options.DefaultTTL))
+                if (!entry.IsExpired(this.settings.DefaultTTL))
                 {
                     entry.UpdateLastAccessed();
                     return Task.FromResult<T?>(entry.Value);
@@ -72,7 +90,7 @@ namespace Common.Persistence.Providers.InMemory
         public Task<IEnumerable<T>> GetAllAsync(Expression<Func<T, bool>>? predicate = null, CancellationToken cancellationToken = default)
         {
             var validEntries = this.cache.Values
-                .Where(entry => !entry.IsExpired(this.options.DefaultTTL))
+                .Where(entry => !entry.IsExpired(this.settings.DefaultTTL))
                 .Select(entry => entry.Value);
 
             if (predicate != null)
@@ -86,7 +104,7 @@ namespace Common.Persistence.Providers.InMemory
 
         public Task SaveAsync(string key, T entity, CancellationToken cancellationToken = default)
         {
-            if (this.options.MaxCacheSize > 0 && this.cache.Count >= this.options.MaxCacheSize)
+            if (this.settings.MaxCacheSize > 0 && this.cache.Count >= this.settings.MaxCacheSize)
             {
                 this.EvictLeastRecentlyUsed();
             }
@@ -103,10 +121,10 @@ namespace Common.Persistence.Providers.InMemory
             var entityList = entities.ToList();
 
             // Check if we need to make space
-            if (this.options.MaxCacheSize > 0)
+            if (this.settings.MaxCacheSize > 0)
             {
                 var newCount = this.cache.Count + entityList.Count;
-                var excessCount = newCount - this.options.MaxCacheSize;
+                var excessCount = newCount - this.settings.MaxCacheSize;
 
                 if (excessCount > 0)
                 {
@@ -131,7 +149,7 @@ namespace Common.Persistence.Providers.InMemory
         {
             if (this.cache.TryGetValue(key, out var entry))
             {
-                if (!entry.IsExpired(this.options.DefaultTTL))
+                if (!entry.IsExpired(this.settings.DefaultTTL))
                 {
                     return Task.FromResult(true);
                 }
@@ -163,7 +181,7 @@ namespace Common.Persistence.Providers.InMemory
             {
                 var now = DateTime.UtcNow;
                 var expiredKeys = this.cache
-                    .Where(kvp => kvp.Value.IsExpired(this.options.DefaultTTL))
+                    .Where(kvp => kvp.Value.IsExpired(this.settings.DefaultTTL))
                     .Select(kvp => kvp.Key)
                     .ToList();
 
@@ -216,46 +234,5 @@ namespace Common.Persistence.Providers.InMemory
             this.evictionTimer?.Dispose();
             this.cache.Clear();
         }
-    }
-
-    public class CacheEntry<T>
-    {
-        public T Value { get; }
-        public DateTime CreatedAt { get; }
-        public DateTime LastAccessed { get; private set; }
-        public DateTime? ExplicitExpiry { get; set; }
-
-        public CacheEntry(T value, DateTime? explicitExpiry = null)
-        {
-            this.Value = value;
-            this.CreatedAt = DateTime.UtcNow;
-            this.LastAccessed = this.CreatedAt;
-            this.ExplicitExpiry = explicitExpiry;
-        }
-
-        public void UpdateLastAccessed()
-        {
-            this.LastAccessed = DateTime.UtcNow;
-        }
-
-        public bool IsExpired(TimeSpan? defaultTTL)
-        {
-            if (this.ExplicitExpiry.HasValue)
-                return DateTime.UtcNow > this.ExplicitExpiry.Value;
-
-            if (defaultTTL.HasValue)
-                return DateTime.UtcNow > this.CreatedAt.Add(defaultTTL.Value);
-
-            return false;
-        }
-    }
-
-    public class InMemoryOptions
-    {
-        public TimeSpan? DefaultTTL { get; set; }
-        public int MaxCacheSize { get; set; } = 10000;
-        public bool EnableEviction { get; set; } = true;
-        public TimeSpan EvictionInterval { get; set; } = TimeSpan.FromMinutes(5);
-        public string EvictionStrategy { get; set; } = "LRU";
     }
 }
