@@ -32,7 +32,7 @@ namespace Common.Persistence.Providers.SqlServer.Tests
             Env.Load();
         }
 
-        public async Task InitializeAsync()
+        public Task InitializeAsync()
         {
             // Setup DI container
             var services = new ServiceCollection();
@@ -69,6 +69,7 @@ namespace Common.Persistence.Providers.SqlServer.Tests
             services.AddPersistence();
 
             this.serviceProvider = services.BuildServiceProvider();
+            return Task.CompletedTask;
         }
 
         public async Task DisposeAsync()
