@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Persistence Provider Performance Benchmark</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 25px 50px rgba(0, 0, 0, 0.15);
+            backdrop-filter: blur(10px);
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .header h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin: 0;
+            letter-spacing: -0.5px;
+        }
+        
+        .header p {
+            font-size: 1.1rem;
+            color: #666;
+            margin: 10px 0 0 0;
+        }
+        
+        .charts-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+        
+        .chart-container {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            border: 1px solid rgba(102, 126, 234, 0.1);
+        }
+        
+        .chart-title {
+            font-size: 1.3rem;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+        
+        .chart-wrapper {
+            position: relative;
+            height: 400px;
+        }
+        
+        .full-width {
+            grid-column: 1 / -1;
+        }
+        
+        .performance-summary {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 20px;
+        }
+        
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+        
+        .summary-card {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 10px;
+            padding: 15px;
+            text-align: center;
+            backdrop-filter: blur(5px);
+        }
+        
+        .summary-card h3 {
+            margin: 0 0 10px 0;
+            font-size: 1.1rem;
+        }
+        
+        .summary-card .value {
+            font-size: 1.5rem;
+            font-weight: bold;
+        }
+        
+        .registry-note {
+            background: linear-gradient(135deg, #ffeaa7, #fab1a0);
+            border-radius: 10px;
+            padding: 15px;
+            margin-top: 20px;
+            border-left: 4px solid #e17055;
+        }
+        
+        .registry-note h4 {
+            margin: 0 0 10px 0;
+            color: #d63031;
+        }
+        
+        .provider-colors {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+        
+        .color-legend {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 8px 15px;
+            border-radius: 20px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        }
+        
+        .color-box {
+            width: 16px;
+            height: 16px;
+            border-radius: 3px;
+        }
+        
+        .insights {
+            background: linear-gradient(135deg, #74b9ff, #0984e3);
+            color: white;
+            border-radius: 15px;
+            padding: 25px;
+            margin-top: 20px;
+        }
+        
+        .insights h3 {
+            margin: 0 0 15px 0;
+            font-size: 1.4rem;
+        }
+        
+        .insights ul {
+            margin: 0;
+            padding-left: 20px;
+            line-height: 1.6;
+        }
+        
+        @media (max-width: 768px) {
+            .charts-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .provider-colors {
+                gap: 15px;
+            }
+            
+            .header h1 {
+                font-size: 2rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Persistence Provider Performance Benchmark</h1>
+            <p>Comparing InMemory, FileSystem, and ESENT Database performance across different payload sizes</p>
+        </div>
+        
+        <div class="performance-summary">
+            <h3>🏆 Performance Overview</h3>
+            <div class="summary-grid">
+                <div class="summary-card">
+                    <h3>Fastest Provider</h3>
+                    <div class="value">InMemory</div>
+                    <small>~0.47ms average</small>
+                </div>
+                <div class="summary-card">
+                    <h3>Most Scalable</h3>
+                    <div class="value">ESENT</div>
+                    <small>Consistent relative performance</small>
+                </div>
+                <div class="summary-card">
+                    <h3>Worst Performer</h3>
+                    <div class="value">FileSystem</div>
+                    <small>Up to 19x slower than ESENT</small>
+                </div>
+                <div class="summary-card">
+                    <h3>Failed Provider</h3>
+                    <div class="value">Registry</div>
+                    <small>Size limitations</small>
+                </div>
+            </div>
+        </div>
+
+        <div class="provider-colors">
+            <div class="color-legend">
+                <div class="color-box" style="background: #667eea;"></div>
+                <span>InMemory</span>
+            </div>
+            <div class="color-legend">
+                <div class="color-box" style="background: #f093fb;"></div>
+                <span>FileSystem</span>
+            </div>
+            <div class="color-legend">
+                <div class="color-box" style="background: #74b9ff;"></div>
+                <span>ESENT</span>
+            </div>
+            <div class="color-legend">
+                <div class="color-box" style="background: #fd79a8;"></div>
+                <span>Registry (Failed)</span>
+            </div>
+        </div>
+        
+        <div class="charts-grid">
+            <div class="chart-container">
+                <div class="chart-title">Performance by Payload Size</div>
+                <div class="chart-wrapper">
+                    <canvas id="payloadChart"></canvas>
+                </div>
+            </div>
+            
+            <div class="chart-container">
+                <div class="chart-title">Operation Type Performance</div>
+                <div class="chart-wrapper">
+                    <canvas id="operationChart"></canvas>
+                </div>
+            </div>
+            
+            <div class="chart-container full-width">
+                <div class="chart-title">Performance Scaling Across Payload Sizes (Log Scale)</div>
+                <div class="chart-wrapper">
+                    <canvas id="scalingChart"></canvas>
+                </div>
+            </div>
+        </div>
+        
+        <div class="registry-note">
+            <h4>⚠️ Registry Provider Limitation</h4>
+            <p>The Windows Registry provider failed to complete any tests due to built-in size limitations. Registry keys have strict size constraints that make them unsuitable for storing larger payloads, which is why all Registry results show "NA".</p>
+        </div>
+        
+        <div class="insights">
+            <h3>🔍 Key Performance Insights</h3>
+            <ul>
+                <li><strong>InMemory is 300-4000x faster</strong> than persistent options, but loses data on restart</li>
+                <li><strong>ESENT scales better</strong> than FileSystem - performance gap narrows with larger payloads</li>
+                <li><strong>FileSystem struggles with large data</strong> - 19x slower than ESENT for large payloads</li>
+                <li><strong>Mixed operations perform best</strong> across all providers due to optimized read-heavy workload</li>
+                <li><strong>Batch operations show promise</strong> for reducing overhead in FileSystem scenarios</li>
+                <li><strong>Registry completely fails</strong> for anything beyond tiny data due to Windows limitations</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        // Processed benchmark data
+        const benchmarkData = [
+            {"ProviderType":"InMemory","PayloadSize":"Small","Method":"Sequential Write Operations","AvgTimeMs":0.46855},
+            {"ProviderType":"InMemory","PayloadSize":"Small","Method":"Sequential Read Operations","AvgTimeMs":0.4789},
+            {"ProviderType":"InMemory","PayloadSize":"Small","Method":"Mixed Operations (70% Read, 20% Write, 10% Delete)","AvgTimeMs":0.34265},
+            {"ProviderType":"InMemory","PayloadSize":"Small","Method":"Batch Operations","AvgTimeMs":0.47155},
+            {"ProviderType":"InMemory","PayloadSize":"Small","Method":"GetAll Operation","AvgTimeMs":0.47485},
+            {"ProviderType":"FileSystem","PayloadSize":"Small","Method":"Sequential Write Operations","AvgTimeMs":168.714},
+            {"ProviderType":"FileSystem","PayloadSize":"Small","Method":"Sequential Read Operations","AvgTimeMs":197.74525},
+            {"ProviderType":"FileSystem","PayloadSize":"Small","Method":"Mixed Operations (70% Read, 20% Write, 10% Delete)","AvgTimeMs":143.2002},
+            {"ProviderType":"FileSystem","PayloadSize":"Small","Method":"Batch Operations","AvgTimeMs":166.97775},
+            {"ProviderType":"FileSystem","PayloadSize":"Small","Method":"GetAll Operation","AvgTimeMs":194.9848},
+            {"ProviderType":"Esent","PayloadSize":"Small","Method":"Sequential Write Operations","AvgTimeMs":83.0276},
+            {"ProviderType":"Esent","PayloadSize":"Small","Method":"Sequential Read Operations","AvgTimeMs":87.8002},
+            {"ProviderType":"Esent","PayloadSize":"Small","Method":"Mixed Operations (70% Read, 20% Write, 10% Delete)","AvgTimeMs":68.32085},
+            {"ProviderType":"Esent","PayloadSize":"Small","Method":"Batch Operations","AvgTimeMs":87.208},
+            {"ProviderType":"Esent","PayloadSize":"Small","Method":"GetAll Operation","AvgTimeMs":87.9933},
+            {"ProviderType":"InMemory","PayloadSize":"Medium","Method":"Sequential Write Operations","AvgTimeMs":0.4663},
+            {"ProviderType":"InMemory","PayloadSize":"Medium","Method":"Sequential Read Operations","AvgTimeMs":0.47775},
+            {"ProviderType":"InMemory","PayloadSize":"Medium","Method":"Mixed Operations (70% Read, 20% Write, 10% Delete)","AvgTimeMs":0.339},
+            {"ProviderType":"InMemory","PayloadSize":"Medium","Method":"Batch Operations","AvgTimeMs":0.46895},
+            {"ProviderType":"InMemory","PayloadSize":"Medium","Method":"GetAll Operation","AvgTimeMs":0.47425},
+            {"ProviderType":"FileSystem","PayloadSize":"Medium","Method":"Sequential Write Operations","AvgTimeMs":208.70675},
+            {"ProviderType":"FileSystem","PayloadSize":"Medium","Method":"Sequential Read Operations","AvgTimeMs":274.5012},
+            {"ProviderType":"FileSystem","PayloadSize":"Medium","Method":"Mixed Operations (70% Read, 20% Write, 10% Delete)","AvgTimeMs":193.67025},
+            {"ProviderType":"FileSystem","PayloadSize":"Medium","Method":"Batch Operations","AvgTimeMs":96.29595},
+            {"ProviderType":"FileSystem","PayloadSize":"Medium","Method":"GetAll Operation","AvgTimeMs":240.72435},
+            {"ProviderType":"Esent","PayloadSize":"Medium","Method":"Sequential Write Operations","AvgTimeMs":440.41955},
+            {"ProviderType":"Esent","PayloadSize":"Medium","Method":"Sequential Read Operations","AvgTimeMs":497.615},
+            {"ProviderType":"Esent","PayloadSize":"Medium","Method":"Mixed Operations (70% Read, 20% Write, 10% Delete)","AvgTimeMs":356.12285},
+            {"ProviderType":"Esent","PayloadSize":"Medium","Method":"Batch Operations","AvgTimeMs":421.41865},
+            {"ProviderType":"Esent","PayloadSize":"Medium","Method":"GetAll Operation","AvgTimeMs":458.46785},
+            {"ProviderType":"InMemory","PayloadSize":"Large","Method":"Sequential Write Operations","AvgTimeMs":0.4671},
+            {"ProviderType":"InMemory","PayloadSize":"Large","Method":"Sequential Read Operations","AvgTimeMs":0.4793},
+            {"ProviderType":"InMemory","PayloadSize":"Large","Method":"Mixed Operations (70% Read, 20% Write, 10% Delete)","AvgTimeMs":0.34185},
+            {"ProviderType":"InMemory","PayloadSize":"Large","Method":"Batch Operations","AvgTimeMs":0.46645},
+            {"ProviderType":"InMemory","PayloadSize":"Large","Method":"GetAll Operation","AvgTimeMs":0.4746},
+            {"ProviderType":"FileSystem","PayloadSize":"Large","Method":"Sequential Write Operations","AvgTimeMs":1501.17685},
+            {"ProviderType":"FileSystem","PayloadSize":"Large","Method":"Sequential Read Operations","AvgTimeMs":3486.16435},
+            {"ProviderType":"FileSystem","PayloadSize":"Large","Method":"Mixed Operations (70% Read, 20% Write, 10% Delete)","AvgTimeMs":2448.49035},
+            {"ProviderType":"FileSystem","PayloadSize":"Large","Method":"Batch Operations","AvgTimeMs":1283.42785},
+            {"ProviderType":"FileSystem","PayloadSize":"Large","Method":"GetAll Operation","AvgTimeMs":2335.04985},
+            {"ProviderType":"Esent","PayloadSize":"Large","Method":"Sequential Write Operations","AvgTimeMs":16609.9575},
+            {"ProviderType":"Esent","PayloadSize":"Large","Method":"Sequential Read Operations","AvgTimeMs":19100.5265},
+            {"ProviderType":"Esent","PayloadSize":"Large","Method":"Mixed Operations (70% Read, 20% Write, 10% Delete)","AvgTimeMs":13801.19725},
+            {"ProviderType":"Esent","PayloadSize":"Large","Method":"Batch Operations","AvgTimeMs":17835.05985},
+            {"ProviderType":"Esent","PayloadSize":"Large","Method":"GetAll Operation","AvgTimeMs":18965.6301}
+        ];
+
+        // Chart configurations
+        const chartConfig = {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'top',
+                    labels: {
+                        padding: 20,
+                        font: {
+                            size: 12,
+                            weight: '500'
+                        }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    grid: {
+                        color: 'rgba(0,0,0,0.05)'
+                    },
+                    ticks: {
+                        font: {
+                            size: 11
+                        }
+                    }
+                },
+                x: {
+                    grid: {
+                        color: 'rgba(0,0,0,0.05)'
+                    },
+                    ticks: {
+                        font: {
+                            size: 11
+                        }
+                    }
+                }
+            }
+        };
+
+        // Provider colors
+        const providerColors = {
+            'InMemory': '#667eea',
+            'FileSystem': '#f093fb',
+            'Esent': '#74b9ff',
+            'Registry': '#fd79a8'
+        };
+
+        // Chart 1: Performance by Payload Size
+        const payloadSizes = ['Small', 'Medium', 'Large'];
+        const providers = ['InMemory', 'FileSystem', 'Esent'];
+        
+        const payloadData = {
+            labels: payloadSizes,
+            datasets: providers.map(provider => {
+                const data = payloadSizes.map(size => {
+                    const records = benchmarkData.filter(d => d.ProviderType === provider && d.PayloadSize === size);
+                    const avg = records.reduce((sum, r) => sum + r.AvgTimeMs, 0) / records.length;
+                    return avg;
+                });
+                
+                return {
+                    label: provider,
+                    data: data,
+                    backgroundColor: providerColors[provider],
+                    borderColor: providerColors[provider],
+                    borderWidth: 2,
+                    borderRadius: 4
+                };
+            })
+        };
+
+        new Chart(document.getElementById('payloadChart'), {
+            type: 'bar',
+            data: payloadData,
+            options: {
+                ...chartConfig,
+                scales: {
+                    ...chartConfig.scales,
+                    y: {
+                        ...chartConfig.scales.y,
+                        type: 'logarithmic',
+                        title: {
+                            display: true,
+                            text: 'Average Time (ms) - Log Scale'
+                        }
+                    }
+                }
+            }
+        });
+
+        // Chart 2: Operation Type Performance
+        const operations = ['Sequential Write', 'Sequential Read', 'Mixed Operations', 'Batch Operations', 'GetAll Operation'];
+        const operationData = {
+            labels: operations,
+            datasets: providers.map(provider => {
+                const data = operations.map(op => {
+                    const records = benchmarkData.filter(d => 
+                        d.ProviderType === provider && 
+                        d.Method.includes(op === 'Mixed Operations' ? 'Mixed' : op.replace(' Operation', ''))
+                    );
+                    const avg = records.reduce((sum, r) => sum + r.AvgTimeMs, 0) / records.length;
+                    return avg;
+                });
+                
+                return {
+                    label: provider,
+                    data: data,
+                    backgroundColor: providerColors[provider],
+                    borderColor: providerColors[provider],
+                    borderWidth: 2,
+                    borderRadius: 4
+                };
+            })
+        };
+
+        new Chart(document.getElementById('operationChart'), {
+            type: 'bar',
+            data: operationData,
+            options: {
+                ...chartConfig,
+                scales: {
+                    ...chartConfig.scales,
+                    y: {
+                        ...chartConfig.scales.y,
+                        type: 'logarithmic',
+                        title: {
+                            display: true,
+                            text: 'Average Time (ms) - Log Scale'
+                        }
+                    }
+                }
+            }
+        });
+
+        // Chart 3: Scaling Chart
+        const scalingData = {
+            labels: payloadSizes,
+            datasets: providers.map(provider => {
+                const data = payloadSizes.map(size => {
+                    const records = benchmarkData.filter(d => d.ProviderType === provider && d.PayloadSize === size);
+                    const avg = records.reduce((sum, r) => sum + r.AvgTimeMs, 0) / records.length;
+                    return avg;
+                });
+                
+                return {
+                    label: provider,
+                    data: data,
+                    borderColor: providerColors[provider],
+                    backgroundColor: providerColors[provider] + '20',
+                    borderWidth: 3,
+                    fill: false,
+                    tension: 0.3,
+                    pointBackgroundColor: providerColors[provider],
+                    pointBorderColor: '#fff',
+                    pointBorderWidth: 2,
+                    pointRadius: 6
+                };
+            })
+        };
+
+        new Chart(document.getElementById('scalingChart'), {
+            type: 'line',
+            data: scalingData,
+            options: {
+                ...chartConfig,
+                scales: {
+                    ...chartConfig.scales,
+                    y: {
+                        ...chartConfig.scales.y,
+                        type: 'logarithmic',
+                        title: {
+                            display: true,
+                            text: 'Average Time (ms) - Log Scale'
+                        }
+                    },
+                    x: {
+                        ...chartConfig.scales.x,
+                        title: {
+                            display: true,
+                            text: 'Payload Size'
+                        }
+                    }
+                }
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Persistence Provider Benchmark Analysis</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        h1, h2 {
+            color: #333;
+        }
+        .summary {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 30px;
+        }
+        .chart-container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+            position: relative;
+            height: 400px;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(600px, 1fr));
+            gap: 20px;
+        }
+        .provider-card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .provider-card h3 {
+            margin-top: 0;
+            color: #2c3e50;
+        }
+        .metric {
+            margin: 10px 0;
+            display: flex;
+            justify-content: space-between;
+        }
+        .metric-label {
+            font-weight: bold;
+            color: #666;
+        }
+        .metric-value {
+            color: #333;
+        }
+        .note {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 4px;
+            padding: 10px;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Persistence Provider Benchmark Analysis</h1>
+        
+        <div class="summary">
+            <h2>Executive Summary</h2>
+            <p>This analysis compares the performance of four persistence providers across different payload sizes and operation types:</p>
+            <ul>
+                <li><strong>InMemory</strong>: Fastest option, storing data in RAM</li>
+                <li><strong>FileSystem</strong>: File-based storage with moderate performance</li>
+                <li><strong>Esent</strong>: Extensible Storage Engine with higher latency but better durability</li>
+                <li><strong>ClusterRegistry</strong>: Registry-based storage with size limitations</li>
+            </ul>
+            <div class="note">
+                <strong>Payload Sizes:</strong> Small = 1KB, Medium = 100KB, Large = 5MB
+            </div>
+        </div>
+
+        <div class="grid">
+            <div class="chart-container">
+                <canvas id="performanceByProvider"></canvas>
+            </div>
+            <div class="chart-container">
+                <canvas id="performanceBySize"></canvas>
+            </div>
+        </div>
+
+        <div class="chart-container">
+            <canvas id="operationComparison"></canvas>
+        </div>
+
+        <h2>Provider Characteristics</h2>
+        <div class="grid">
+            <div class="provider-card">
+                <h3>🚀 InMemory Provider</h3>
+                <div class="metric">
+                    <span class="metric-label">Average Latency:</span>
+                    <span class="metric-value">~180-250 μs (all sizes)</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Consistency:</span>
+                    <span class="metric-value">Very High (low variance)</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Payload Support:</span>
+                    <span class="metric-value">1KB ✓ | 100KB ✓ | 5MB ✓</span>
+                </div>
+                <p><strong>Use Cases:</strong> Caching, temporary data, high-frequency trading, real-time analytics</p>
+                <p><strong>Pros:</strong> Fastest performance, predictable latency, no I/O overhead</p>
+                <p><strong>Cons:</strong> Data loss on restart, limited by available memory</p>
+            </div>
+
+            <div class="provider-card">
+                <h3>📁 FileSystem Provider</h3>
+                <div class="metric">
+                    <span class="metric-label">Average Latency:</span>
+                    <span class="metric-value">1KB: ~250ms | 100KB: ~220ms | 5MB: ~2.4s</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Consistency:</span>
+                    <span class="metric-value">Low (high variance)</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Payload Support:</span>
+                    <span class="metric-value">1KB ✓ | 100KB ✓ | 5MB ✓</span>
+                </div>
+                <p><strong>Use Cases:</strong> Configuration storage, logs, document management, backups</p>
+                <p><strong>Pros:</strong> Simple, portable, human-readable files, good for large data</p>
+                <p><strong>Cons:</strong> High latency variance, I/O bottlenecks, file locking issues</p>
+            </div>
+
+            <div class="provider-card">
+                <h3>🗄️ Esent Provider</h3>
+                <div class="metric">
+                    <span class="metric-label">Average Latency:</span>
+                    <span class="metric-value">1KB: ~400ms | 100KB: ~1.9s | 5MB: ~100s</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Consistency:</span>
+                    <span class="metric-value">Medium</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Payload Support:</span>
+                    <span class="metric-value">1KB ✓ | 100KB ✓ | 5MB ✓ (slow)</span>
+                </div>
+                <p><strong>Use Cases:</strong> Windows services, desktop applications, local databases</p>
+                <p><strong>Pros:</strong> ACID compliance, crash recovery, efficient for small datasets</p>
+                <p><strong>Cons:</strong> Windows-only, extreme latency with large payloads, complex configuration</p>
+                <div class="note">
+                    <strong>Warning:</strong> 5MB payload operations take 75-140 seconds (250x slower than 100KB)
+                </div>
+            </div>
+
+            <div class="provider-card">
+                <h3>🔧 ClusterRegistry Provider</h3>
+                <div class="metric">
+                    <span class="metric-label">Average Latency:</span>
+                    <span class="metric-value">1KB: ~6ms | 100KB: ~110ms | 5MB: ❌ FAILED</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Consistency:</span>
+                    <span class="metric-value">High</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Payload Support:</span>
+                    <span class="metric-value">1KB ✓ | 100KB ✓ | 5MB ❌</span>
+                </div>
+                <p><strong>Use Cases:</strong> Service configuration, cluster state, small metadata</p>
+                <p><strong>Pros:</strong> System integration, atomic operations, cluster-aware, fast for small data</p>
+                <p><strong>Cons:</strong> Hard size limit, Windows-specific, fails with payloads > 1MB</p>
+                <div class="note">
+                    <strong>Critical Limitation:</strong> All operations fail with 5MB payloads - registry has hard size limits
+                </div>
+            </div>
+        </div>
+
+        <div class="summary" style="margin-top: 30px;">
+            <h2>Key Findings</h2>
+            <ol>
+                <li><strong>InMemory is 1000-450,000x faster</strong> than disk-based alternatives</li>
+                <li><strong>FileSystem shows 10x increase</strong> in latency from 100KB to 5MB payloads</li>
+                <li><strong>Esent exhibits catastrophic degradation</strong> with 5MB payloads (100 seconds vs 1.9 seconds for 100KB)</li>
+                <li><strong>ClusterRegistry completely fails</strong> with 5MB payloads due to registry size limitations</li>
+                <li><strong>Only InMemory maintains consistent performance</strong> across all payload sizes (1KB to 5MB)</li>
+            </ol>
+
+            <h2>Performance Summary</h2>
+            <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+                <tr style="background: #f0f0f0;">
+                    <th style="padding: 10px; border: 1px solid #ddd;">Provider</th>
+                    <th style="padding: 10px; border: 1px solid #ddd;">1KB</th>
+                    <th style="padding: 10px; border: 1px solid #ddd;">100KB</th>
+                    <th style="padding: 10px; border: 1px solid #ddd;">5MB</th>
+                    <th style="padding: 10px; border: 1px solid #ddd;">Scaling Factor</th>
+                </tr>
+                <tr>
+                    <td style="padding: 10px; border: 1px solid #ddd;"><strong>InMemory</strong></td>
+                    <td style="padding: 10px; border: 1px solid #ddd;">190 μs</td>
+                    <td style="padding: 10px; border: 1px solid #ddd;">190 μs</td>
+                    <td style="padding: 10px; border: 1px solid #ddd;">220 μs</td>
+                    <td style="padding: 10px; border: 1px solid #ddd;">1.2x</td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px; border: 1px solid #ddd;"><strong>FileSystem</strong></td>
+                    <td style="padding: 10px; border: 1px solid #ddd;">250 ms</td>
+                    <td style="padding: 10px; border: 1px solid #ddd;">220 ms</td>
+                    <td style="padding: 10px; border: 1px solid #ddd;">2.4 s</td>
+                    <td style="padding: 10px; border: 1px solid #ddd;">10x</td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px; border: 1px solid #ddd;"><strong>Esent</strong></td>
+                    <td style="padding: 10px; border: 1px solid #ddd;">400 ms</td>
+                    <td style="padding: 10px; border: 1px solid #ddd;">1.9 s</td>
+                    <td style="padding: 10px; border: 1px solid #ddd;">100 s</td>
+                    <td style="padding: 10px; border: 1px solid #ddd;">250x</td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px; border: 1px solid #ddd;"><strong>ClusterRegistry</strong></td>
+                    <td style="padding: 10px; border: 1px solid #ddd;">6 ms</td>
+                    <td style="padding: 10px; border: 1px solid #ddd;">110 ms</td>
+                    <td style="padding: 10px; border: 1px solid #ddd;">❌ FAILED</td>
+                    <td style="padding: 10px; border: 1px solid #ddd;">N/A</td>
+                </tr>
+            </table>
+
+            <h2>Recommendations by Payload Size</h2>
+            <ul>
+                <li><strong>Small data (< 10KB):</strong> ClusterRegistry offers best performance for configuration data</li>
+                <li><strong>Medium data (10KB - 1MB):</strong> InMemory for speed, FileSystem for persistence</li>
+                <li><strong>Large data (> 1MB):</strong> Only InMemory and FileSystem are viable; avoid Esent and ClusterRegistry</li>
+                <li><strong>For mixed workloads:</strong> Implement tiered storage with InMemory cache + FileSystem persistence</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        // Performance by Provider Chart
+        const ctx1 = document.getElementById('performanceByProvider').getContext('2d');
+        new Chart(ctx1, {
+            type: 'bar',
+            data: {
+                labels: ['InMemory', 'FileSystem', 'Esent', 'ClusterRegistry'],
+                datasets: [
+                    {
+                        label: 'Small Payload - 1KB (μs)',
+                        data: [190, 250000, 400000, 6000],
+                        backgroundColor: 'rgba(54, 162, 235, 0.8)'
+                    },
+                    {
+                        label: 'Medium Payload - 100KB (μs)',
+                        data: [190, 220000, 1900000, 110000],
+                        backgroundColor: 'rgba(255, 99, 132, 0.8)'
+                    },
+                    {
+                        label: 'Large Payload - 5MB (μs)',
+                        data: [220, 2400000, 100000000, null],
+                        backgroundColor: 'rgba(75, 192, 192, 0.8)'
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    title: {
+                        display: true,
+                        text: 'Average Latency by Provider and Payload Size',
+                        font: { size: 16 }
+                    }
+                },
+                scales: {
+                    y: {
+                        type: 'logarithmic',
+                        title: {
+                            display: true,
+                            text: 'Latency (μs) - Log Scale'
+                        }
+                    }
+                }
+            }
+        });
+
+        // Performance by Size Chart
+        const ctx2 = document.getElementById('performanceBySize').getContext('2d');
+        new Chart(ctx2, {
+            type: 'line',
+            data: {
+                labels: ['Small (1KB)', 'Medium (100KB)', 'Large (5MB)'],
+                datasets: [
+                    {
+                        label: 'InMemory',
+                        data: [190, 190, 220],
+                        borderColor: 'rgb(54, 162, 235)',
+                        backgroundColor: 'rgba(54, 162, 235, 0.1)',
+                        tension: 0.1
+                    },
+                    {
+                        label: 'FileSystem',
+                        data: [250, 220, 2400],
+                        borderColor: 'rgb(255, 99, 132)',
+                        backgroundColor: 'rgba(255, 99, 132, 0.1)',
+                        tension: 0.1
+                    },
+                    {
+                        label: 'Esent',
+                        data: [400, 1900, 100000],
+                        borderColor: 'rgb(75, 192, 192)',
+                        backgroundColor: 'rgba(75, 192, 192, 0.1)',
+                        tension: 0.1
+                    },
+                    {
+                        label: 'ClusterRegistry',
+                        data: [6, 110, null],
+                        borderColor: 'rgb(255, 159, 64)',
+                        backgroundColor: 'rgba(255, 159, 64, 0.1)',
+                        tension: 0.1,
+                        spanGaps: false
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    title: {
+                        display: true,
+                        text: 'Latency Scaling with Payload Size',
+                        font: { size: 16 }
+                    }
+                },
+                scales: {
+                    y: {
+                        type: 'logarithmic',
+                        title: {
+                            display: true,
+                            text: 'Latency (ms) - Log Scale'
+                        },
+                        ticks: {
+                            callback: function(value) {
+                                return value / 1000 + ' ms';
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        // Operation Type Comparison
+        const ctx3 = document.getElementById('operationComparison').getContext('2d');
+        new Chart(ctx3, {
+            type: 'radar',
+            data: {
+                labels: ['Sequential Write', 'Sequential Read', 'Mixed Operations', 'Batch Operations', 'GetAll'],
+                datasets: [
+                    {
+                        label: 'InMemory',
+                        data: [190, 200, 150, 190, 195],
+                        borderColor: 'rgb(54, 162, 235)',
+                        backgroundColor: 'rgba(54, 162, 235, 0.2)'
+                    },
+                    {
+                        label: 'FileSystem (scaled /1000)',
+                        data: [200, 250, 180, 150, 250],
+                        borderColor: 'rgb(255, 99, 132)',
+                        backgroundColor: 'rgba(255, 99, 132, 0.2)'
+                    },
+                    {
+                        label: 'Esent (scaled /2000)',
+                        data: [200, 200, 150, 200, 200],
+                        borderColor: 'rgb(75, 192, 192)',
+                        backgroundColor: 'rgba(75, 192, 192, 0.2)'
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    title: {
+                        display: true,
+                        text: 'Operation Type Performance (Normalized)',
+                        font: { size: 16 }
+                    }
+                },
+                scales: {
+                    r: {
+                        beginAtZero: true,
+                        max: 300
+                    }
+                }
+            }
+        });
+    </script>
+</body>
+</html>
