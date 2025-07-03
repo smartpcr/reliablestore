@@ -49,5 +49,19 @@ namespace Common.Persistence.Providers.Esent
         /// Default is false for backward compatibility.
         /// </summary>
         public bool UseSessionPool { get; set; } = false;
+
+        /// <summary>
+        /// Gets or sets whether to enable automatic crash recovery.
+        /// When enabled, the provider will attempt to recover from dirty shutdowns
+        /// and handle corrupted databases by backing them up and creating new ones.
+        /// Default is true.
+        /// </summary>
+        public bool EnableCrashRecovery { get; set; } = true;
+
+        /// <summary>
+        /// Gets or sets the number of days to keep old temporary files before cleanup.
+        /// Default is 1 day.
+        /// </summary>
+        public int TempFileRetentionDays { get; set; } = 1;
     }
 }

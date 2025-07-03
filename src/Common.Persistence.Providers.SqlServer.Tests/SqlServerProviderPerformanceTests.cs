@@ -51,16 +51,15 @@ namespace Common.Persistence.Providers.SqlServer.Tests
                 [$"Providers:{this.providerName}:TypeName"] = "Common.Persistence.Providers.SqlServer.SqlServerProvider`1",
                 [$"Providers:{this.providerName}:Enabled"] = "true",
                 [$"Providers:{this.providerName}:Capabilities"] = "1",
-                [$"Providers:{this.providerName}:Host"] = "localhost",
-                [$"Providers:{this.providerName}:Port"] = "1433",
-                [$"Providers:{this.providerName}:DbName"] = "ReliableStorePerfTest",
-                [$"Providers:{this.providerName}:UserId"] = "sa",
+                [$"Providers:{this.providerName}:Host"] = Environment.GetEnvironmentVariable("DB_HOST")!,
+                [$"Providers:{this.providerName}:Port"] = Environment.GetEnvironmentVariable("DB_PORT")!,
+                [$"Providers:{this.providerName}:DbName"] = Environment.GetEnvironmentVariable("DB_NAME")!,
+                [$"Providers:{this.providerName}:UserId"] = Environment.GetEnvironmentVariable("DB_USER")!,
                 [$"Providers:{this.providerName}:Password"] = Environment.GetEnvironmentVariable("DB_PASSWORD")!,
                 [$"Providers:{this.providerName}:CommandTimeout"] = "60",
                 [$"Providers:{this.providerName}:EnableRetryLogic"] = "true",
                 [$"Providers:{this.providerName}:MaxRetryCount"] = "3",
                 [$"Providers:{this.providerName}:CreateTableIfNotExists"] = "true",
-                [$"Providers:{this.providerName}:CreateDatabaseIfNotExists"] = "true",
                 [$"Providers:{this.providerName}:Schema"] = this.schemaName
             };
 

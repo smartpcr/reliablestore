@@ -32,8 +32,6 @@ namespace Common.Persistence.Providers.SqlServer
 
         public bool CreateTableIfNotExists { get; set; } = true;
 
-        public bool CreateDatabaseIfNotExists { get; set; } = true;
-
         public string Schema { get; set; } = "dbo";
 
         public string GetConnectionString()

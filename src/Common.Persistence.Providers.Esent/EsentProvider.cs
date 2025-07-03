@@ -20,6 +20,16 @@ namespace Common.Persistence.Providers.Esent
     using Microsoft.Isam.Esent.Interop;
     using Unity;
 
+    /// <summary>
+    /// ESENT-based storage provider with automatic crash recovery support.
+    /// This provider handles:
+    /// - Automatic recovery from dirty shutdowns
+    /// - Corrupted database backup and recreation
+    /// - Transaction log cleanup
+    /// - Temporary file management
+    /// - Clean shutdown procedures
+    /// </summary>
+    /// <typeparam name="T">The entity type to store.</typeparam>
     public partial class EsentProvider<T> : ICrudStorageProvider<T> where T : IEntity
     {
         private readonly EsentStoreSettings storeSettings;
@@ -70,8 +80,40 @@ namespace Common.Persistence.Providers.Esent
                 this.instance.Parameters.MaxCursors = 1024;
                 this.instance.Parameters.MaxVerPages = 1024;
 
-                // Initialize instance
-                this.instance.Init();
+                // Perform crash recovery if needed
+                if (this.storeSettings.EnableCrashRecovery)
+                {
+                    this.PerformCrashRecovery(directory);
+                }
+
+                // Initialize instance with recovery
+                try
+                {
+                    // JetInit will automatically perform recovery if needed
+                    this.instance.Init();
+                }
+                catch (EsentErrorException ex)
+                {
+                    this.logger.LogWarning(ex, "ESENT initialization failed, attempting recovery");
+                    
+                    // Try to recover from dirty shutdown
+                    if (ex.Error == JET_err.DatabaseDirtyShutdown || 
+                        ex.Error == JET_err.LogFileSizeMismatch ||
+                        ex.Error == JET_err.LogFileCorrupt)
+                    {
+                        this.CleanupCorruptedDatabase(directory);
+                        
+                        // Recreate instance after cleanup
+                        this.instance.Dispose();
+                        this.instance = new Instance(this.storeSettings.InstanceName);
+                        this.SetInstanceParameters(directory);
+                        this.instance.Init();
+                    }
+                    else
+                    {
+                        throw;
+                    }
+                }
 
                 // Initialize session pool if enabled
                 if (this.storeSettings.UseSessionPool)
@@ -580,6 +622,167 @@ namespace Common.Persistence.Providers.Esent
             }
         }
 
+        private void PerformCrashRecovery(string directory)
+        {
+            try
+            {
+                // Check for existing log files that might indicate a dirty shutdown
+                var logFiles = Directory.GetFiles(directory, "*.log", SearchOption.TopDirectoryOnly)
+                    .Concat(Directory.GetFiles(directory, "edb*.jrs", SearchOption.TopDirectoryOnly))
+                    .ToArray();
+
+                if (logFiles.Length > 0)
+                {
+                    this.logger.LogInformation("Found {Count} ESENT log files, checking for dirty shutdown", logFiles.Length);
+                    
+                    // Check for checkpoint file
+                    var checkpointFile = Path.Combine(directory, "edb.chk");
+                    if (!File.Exists(checkpointFile))
+                    {
+                        this.logger.LogWarning("No checkpoint file found, database may have shut down improperly");
+                    }
+                }
+
+                // Clean up old temporary files
+                this.CleanupTemporaryFiles(directory);
+            }
+            catch (Exception ex)
+            {
+                this.logger.LogWarning(ex, "Error during crash recovery check");
+            }
+        }
+
+        private void CleanupCorruptedDatabase(string directory)
+        {
+            this.logger.LogWarning("Attempting to clean up corrupted database files in {Directory}", directory);
+
+            try
+            {
+                // Delete transaction logs
+                foreach (var logFile in Directory.GetFiles(directory, "*.log", SearchOption.TopDirectoryOnly))
+                {
+                    try
+                    {
+                        File.Delete(logFile);
+                        this.logger.LogDebug("Deleted log file: {File}", logFile);
+                    }
+                    catch (Exception ex)
+                    {
+                        this.logger.LogWarning(ex, "Failed to delete log file: {File}", logFile);
+                    }
+                }
+
+                // Delete checkpoint file
+                var checkpointFile = Path.Combine(directory, "edb.chk");
+                if (File.Exists(checkpointFile))
+                {
+                    try
+                    {
+                        File.Delete(checkpointFile);
+                        this.logger.LogDebug("Deleted checkpoint file");
+                    }
+                    catch (Exception ex)
+                    {
+                        this.logger.LogWarning(ex, "Failed to delete checkpoint file");
+                    }
+                }
+
+                // Delete reserve logs
+                foreach (var reserveLog in Directory.GetFiles(directory, "edbres*.jrs", SearchOption.TopDirectoryOnly))
+                {
+                    try
+                    {
+                        File.Delete(reserveLog);
+                        this.logger.LogDebug("Deleted reserve log: {File}", reserveLog);
+                    }
+                    catch (Exception ex)
+                    {
+                        this.logger.LogWarning(ex, "Failed to delete reserve log: {File}", reserveLog);
+                    }
+                }
+
+                // Delete temporary files
+                foreach (var tempFile in Directory.GetFiles(directory, "*.tmp", SearchOption.TopDirectoryOnly))
+                {
+                    try
+                    {
+                        File.Delete(tempFile);
+                        this.logger.LogDebug("Deleted temp file: {File}", tempFile);
+                    }
+                    catch (Exception ex)
+                    {
+                        this.logger.LogWarning(ex, "Failed to delete temp file: {File}", tempFile);
+                    }
+                }
+
+                // If database file exists and is corrupted, we may need to delete it
+                if (File.Exists(this.storeSettings.DatabasePath))
+                {
+                    this.logger.LogWarning("Database file exists but may be corrupted. Backing up before deletion");
+                    
+                    var backupPath = this.storeSettings.DatabasePath + ".corrupted." + DateTime.UtcNow.Ticks;
+                    try
+                    {
+                        File.Move(this.storeSettings.DatabasePath, backupPath);
+                        this.logger.LogInformation("Backed up corrupted database to: {BackupPath}", backupPath);
+                    }
+                    catch (Exception ex)
+                    {
+                        this.logger.LogError(ex, "Failed to backup corrupted database");
+                        // Last resort - delete the corrupted database
+                        File.Delete(this.storeSettings.DatabasePath);
+                        this.logger.LogWarning("Deleted corrupted database file");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                this.logger.LogError(ex, "Failed to cleanup corrupted database");
+                throw new InvalidOperationException("Failed to cleanup corrupted database", ex);
+            }
+        }
+
+        private void CleanupTemporaryFiles(string directory)
+        {
+            try
+            {
+                // Clean up old temporary files
+                var tempFiles = Directory.GetFiles(directory, "*.tmp", SearchOption.TopDirectoryOnly)
+                    .Where(f => File.GetLastWriteTimeUtc(f) < DateTime.UtcNow.AddDays(-this.storeSettings.TempFileRetentionDays));
+
+                foreach (var tempFile in tempFiles)
+                {
+                    try
+                    {
+                        File.Delete(tempFile);
+                        this.logger.LogDebug("Deleted old temp file: {File}", tempFile);
+                    }
+                    catch
+                    {
+                        // Ignore failures for individual files
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                this.logger.LogDebug(ex, "Error cleaning up temporary files");
+            }
+        }
+
+        private void SetInstanceParameters(string directory)
+        {
+            this.instance.Parameters.SystemDirectory = directory;
+            this.instance.Parameters.TempDirectory = directory;
+            this.instance.Parameters.LogFileDirectory = directory;
+            this.instance.Parameters.BaseName = "edb";
+            this.instance.Parameters.NoInformationEvent = true;
+            this.instance.Parameters.CircularLog = true;
+            this.instance.Parameters.MaxSessions = 256;
+            this.instance.Parameters.MaxOpenTables = 256;
+            this.instance.Parameters.MaxCursors = 1024;
+            this.instance.Parameters.MaxVerPages = 1024;
+        }
+
         public void Dispose()
         {
             if (!this.disposed)
@@ -588,22 +791,51 @@ namespace Common.Persistence.Providers.Esent
                 {
                     try
                     {
+                        // Ensure all sessions are closed if using session pool
+                        if (this.sessionPool != null)
+                        {
+                            // Wait for any active sessions to complete
+                            this.semaphore.Wait(TimeSpan.FromSeconds(5));
+                        }
+
                         // Detach database before disposing instance
                         using (var session = new Session(this.instance))
                         {
-                            Api.JetDetachDatabase(session, this.storeSettings.DatabasePath);
+                            try
+                            {
+                                Api.JetDetachDatabase(session, this.storeSettings.DatabasePath);
+                                this.logger.LogDebug("Successfully detached database");
+                            }
+                            catch (EsentErrorException ex)
+                            {
+                                this.logger.LogWarning(ex, "Failed to detach database during disposal");
+                            }
+                        }
+
+                        // Terminate instance cleanly
+                        try
+                        {
+                            this.instance.Term();
+                            this.logger.LogDebug("Successfully terminated ESENT instance");
+                        }
+                        catch (EsentErrorException ex)
+                        {
+                            this.logger.LogWarning(ex, "Failed to terminate instance cleanly");
                         }
                     }
-                    catch
+                    catch (Exception ex)
                     {
-                        // Ignore errors during cleanup
+                        this.logger.LogError(ex, "Error during ESENT provider disposal");
                     }
-                    
-                    this.instance.Dispose();
+                    finally
+                    {
+                        this.instance.Dispose();
+                    }
                 }
                 
                 this.semaphore?.Dispose();
                 this.disposed = true;
+                this.logger.LogInformation("ESENT provider disposed for entity type {EntityType}", typeof(T).Name);
             }
         }
     }

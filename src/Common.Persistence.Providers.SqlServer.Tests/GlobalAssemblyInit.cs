@@ -11,14 +11,11 @@ using System.Diagnostics;
 using System.IO;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using System.Threading;
 using System.Threading.Tasks;
 using DotNetEnv;
 
 public static class GlobalAssemblyInit
 {
-    private static readonly SemaphoreSlim initializationSemaphore = new(1, 1);
-    private static bool isInitialized;
     private static Process? composeProcess;
 
     [ModuleInitializer]
@@ -34,9 +31,9 @@ public static class GlobalAssemblyInit
                 Env.Load(envPath);
                 Console.WriteLine($"GlobalAssemblyInit: Loaded .env from {envPath}");
             }
-            
+
             // Start Docker Compose in background - don't wait
-            Task.Run(async () => 
+            Task.Run(async () =>
             {
                 try
                 {
@@ -44,14 +41,14 @@ public static class GlobalAssemblyInit
                 }
                 catch (Exception ex)
                 {
-                    Console.Error.WriteLine($"GlobalAssemblyInit: Background error: {ex.Message}");
+                    await Console.Error.WriteLineAsync($"GlobalAssemblyInit: Background error: {ex.Message}");
                 }
             });
-            
+
             // Register cleanup on app domain unload
             AppDomain.CurrentDomain.ProcessExit += OnProcessExit;
             AppDomain.CurrentDomain.DomainUnload += (s, e) => OnProcessExit(s, e);
-            
+
             Console.WriteLine("GlobalAssemblyInit: Initialization completed.");
         }
         catch (Exception ex)
@@ -76,7 +73,7 @@ public static class GlobalAssemblyInit
         }
 
         Console.WriteLine("GlobalAssemblyInit: Container or database not ready, starting Docker Compose...");
-        
+
         // Start Docker Compose
         GlobalAssemblyInit.composeProcess = new Process
         {
@@ -210,31 +207,8 @@ public static class GlobalAssemblyInit
                 return false;
             }
 
-            Console.WriteLine("GlobalAssemblyInit: Container is healthy, checking database...");
-
-            // Check if database exists
-            var password = Environment.GetEnvironmentVariable("SA_PASSWORD") ?? "YourStrong@Passw0rd";
-            var checkDbProcess = new Process
-            {
-                StartInfo = new ProcessStartInfo
-                {
-                    FileName = containerRuntime,
-                    Arguments = $"exec reliablestore-sqlserver-tests /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"{password}\" -C -Q \"IF DB_ID(N'ReliableStoreTest') IS NOT NULL SELECT 'EXISTS' ELSE SELECT 'NOT_EXISTS'\"",
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    UseShellExecute = false,
-                    CreateNoWindow = true
-                }
-            };
-
-            checkDbProcess.Start();
-            var dbOutput = await checkDbProcess.StandardOutput.ReadToEndAsync();
-            await checkDbProcess.WaitForExitAsync();
-
-            var dbExists = dbOutput.Contains("EXISTS") && !dbOutput.Contains("NOT_EXISTS");
-            Console.WriteLine($"GlobalAssemblyInit: Database exists: {dbExists}");
-
-            return dbExists;
+            Console.WriteLine("GlobalAssemblyInit: Container is healthy. Database creation is handled by docker-compose.");
+            return true;
         }
         catch (Exception ex)
         {
@@ -270,7 +244,7 @@ public static class GlobalAssemblyInit
 
     private static void OnProcessExit(object? sender, EventArgs e)
     {
-        GlobalAssemblyInit.StopDockerCompose();
+        // GlobalAssemblyInit.StopDockerCompose();
     }
 
     public static void StopDockerCompose()

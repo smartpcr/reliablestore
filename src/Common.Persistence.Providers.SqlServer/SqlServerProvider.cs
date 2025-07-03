@@ -62,11 +62,6 @@ namespace Common.Persistence.Providers.SqlServer
             {
                 if (this.initialized) return;
 
-                if (this.settings.CreateDatabaseIfNotExists)
-                {
-                    await this.CreateDatabaseIfNotExistsAsync(cancellationToken);
-                }
-
                 await this.CreateSchemaIfNotExistsAsync(cancellationToken);
 
                 if (this.settings.CreateTableIfNotExists)
@@ -82,30 +77,6 @@ namespace Common.Persistence.Providers.SqlServer
             }
         }
 
-        private async Task CreateDatabaseIfNotExistsAsync(CancellationToken cancellationToken)
-        {
-            // Connect to master database to create the target database
-            var masterConnectionString = $"Server={this.settings.Host},{this.settings.Port};Database=master;User Id={this.settings.UserId};Password={this.settings.Password};TrustServerCertificate=true";
-            
-            await using var connection = new SqlConnection(masterConnectionString);
-            await connection.OpenAsync(cancellationToken);
-
-            // Check if database exists
-            var checkDbSql = "SELECT COUNT(*) FROM sys.databases WHERE name = @DbName";
-            await using var checkCommand = new SqlCommand(checkDbSql, connection);
-            checkCommand.Parameters.AddWithValue("@DbName", this.settings.DbName);
-            
-            var exists = (int)await checkCommand.ExecuteScalarAsync(cancellationToken) > 0;
-            if (!exists)
-            {
-                // Create database
-                var createDbSql = $"CREATE DATABASE [{this.settings.DbName}]";
-                await using var createCommand = new SqlCommand(createDbSql, connection);
-                await createCommand.ExecuteNonQueryAsync(cancellationToken);
-                
-                this.logger.LogInformation("Created database {DatabaseName}", this.settings.DbName);
-            }
-        }
 
         private async Task CreateSchemaIfNotExistsAsync(CancellationToken cancellationToken)
         {
