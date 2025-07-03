@@ -37,10 +37,15 @@
   <ItemGroup>
     <PackageVersion Include="BenchmarkDotNet" Version="0.14.0" />
     <PackageVersion Include="BenchmarkDotNet.Diagnostics.Windows" Version="0.14.0" />
+    <PackageVersion Include="DotNetEnv" Version="3.1.1" />
+    <PackageVersion Include="FluentAssertions" Version="7.1.0" />
+    <PackageVersion Include="Microsoft.Data.SqlClient" Version="5.2.3" />
     <PackageVersion Include="Microsoft.Database.ManagedEsent" Version="2.0.4" />
     <PackageVersion Include="Nerdbank.GitVersioning" Version="3.7.115" />
     <PackageVersion Include="Newtonsoft.Json" Version="13.0.3" />
+    <PackageVersion Include="Testcontainers.MsSql" Version="4.2.0" />
     <PackageVersion Include="Unity" Version="5.11.7" />
+    <PackageVersion Include="Unity.Abstractions" Version="5.11.7" />
   </ItemGroup>
 
   <!-- test -->
@@ -63,6 +68,7 @@
     <PackageVersion Include="Reqnroll.Tools.MsBuild.Generation" Version="$(ReqnrollVersion)" />
     <PackageVersion Include="Reqnroll.xUnit" Version="$(ReqnrollVersion)" />
     <PackageVersion Include="xunit" Version="2.9.3" />
+    <PackageVersion Include="Xunit.Extensions.Logging" Version="1.1.0" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="3.0.2">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>

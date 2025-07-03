@@ -33,7 +33,8 @@
       "Bash(sed:*)",
       "Bash(chmod:*)",
       "Bash(bash:*)",
-      "WebFetch(domain:learn.microsoft.com)"
+      "WebFetch(domain:learn.microsoft.com)",
+      "Bash(touch:*)"
     ],
     "deny": []
   }

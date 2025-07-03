@@ -13,7 +13,7 @@ trim_trailing_whitespace = true
 # Organize using statements
 dotnet_separate_import_directive_groups = false
 dotnet_sort_system_directives_first = true
-csharp_using_directive_placement = inside_namespace:suggestion
+csharp_using_directive_placement = inside_namespace:warning
 
 # file header
 file_header_template = -----------------------------------------------------------------------\n<copyright file="{fileName}" company="Microsoft Corp.">\n    Copyright (c) Microsoft Corp. All rights reserved.\n</copyright>\n-----------------------------------------------------------------------
@@ -31,10 +31,10 @@ tab_width = 4
 [*.cs]
 
 # Enforce 'this' qualifier for instance members
-dotnet_style_qualification_for_field = true:suggestion
-dotnet_style_qualification_for_property = true:suggestion
-dotnet_style_qualification_for_method = true:suggestion
-dotnet_style_qualification_for_event = true:suggestion
+dotnet_style_qualification_for_field = true:warning
+dotnet_style_qualification_for_property = true:warning
+dotnet_style_qualification_for_method = true:warning
+dotnet_style_qualification_for_event = true:warning
 
 # var preferences
 csharp_style_var_elsewhere = true:suggestion
@@ -42,20 +42,13 @@ csharp_style_var_for_built_in_types = true:suggestion
 csharp_style_var_when_type_is_apparent = true:suggestion
 
 # Enforce naming rules for private fields without underscore
-dotnet_naming_rule.private_members_with_underscore.severity = none
-dotnet_naming_rule.private_members_camel_case.symbols  = private_fields
-dotnet_naming_rule.private_members_camel_case.style    = camel_case
-dotnet_naming_rule.private_members_camel_case.severity = suggestion
+dotnet_naming_rule.private_fields_camel_case.severity = warning
+dotnet_naming_rule.private_fields_camel_case.symbols = private_fields
+dotnet_naming_rule.private_fields_camel_case.style = camel_case_style
 
-dotnet_naming_style.camel_case.capitalization = camel_case
-dotnet_naming_style.camel_case.required_prefix =
-
-dotnet_naming_rule.private_members_with_underscore.symbols  = private_fields
-dotnet_naming_rule.private_members_with_underscore.style    = prefix_underscore
-
-dotnet_naming_style.prefix_underscore.capitalization = camel_case
-dotnet_naming_style.prefix_underscore.required_prefix =
-
-dotnet_naming_symbols.private_fields.applicable_kinds           = field
+dotnet_naming_symbols.private_fields.applicable_kinds = field
 dotnet_naming_symbols.private_fields.applicable_accessibilities = private
-dotnet_naming_symbols.private_fields.required_modifiers         = readonly
+
+dotnet_naming_style.camel_case_style.capitalization = camel_case
+dotnet_naming_style.camel_case_style.required_prefix = 
+dotnet_naming_style.camel_case_style.required_suffix = 

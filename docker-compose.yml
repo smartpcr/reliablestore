@@ -1,6 +1,25 @@
 version: '3.8'
 
 services:
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    environment:
+      - ACCEPT_EULA=Y
+      - SA_PASSWORD=YourStrong@Passw0rd
+      - MSSQL_PID=Express
+    ports:
+      - "1433:1433"
+    volumes:
+      - sqlserver-data:/var/opt/mssql
+    networks:
+      - reliablestore-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "/opt/mssql-tools/bin/sqlcmd", "-S", "localhost", "-U", "sa", "-P", "YourStrong@Passw0rd", "-Q", "SELECT 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   catalog-service:
     build:
       context: .
@@ -10,10 +29,14 @@ services:
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
       - ASPNETCORE_URLS=http://+:8080
+      - ConnectionStrings__SqlServer=Server=sqlserver;Database=ReliableStore;User Id=sa;Password=YourStrong@Passw0rd;TrustServerCertificate=true
     volumes:
       - ./data/catalog:/app/data
     networks:
       - reliablestore-network
+    depends_on:
+      sqlserver:
+        condition: service_healthy
     restart: unless-stopped
 
   customer-service:
@@ -25,10 +48,14 @@ services:
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
       - ASPNETCORE_URLS=http://+:8080
+      - ConnectionStrings__SqlServer=Server=sqlserver;Database=ReliableStore;User Id=sa;Password=YourStrong@Passw0rd;TrustServerCertificate=true
     volumes:
       - ./data/customer:/app/data
     networks:
       - reliablestore-network
+    depends_on:
+      sqlserver:
+        condition: service_healthy
     restart: unless-stopped
 
   order-service:
@@ -40,16 +67,23 @@ services:
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
       - ASPNETCORE_URLS=http://+:8080
+      - ConnectionStrings__SqlServer=Server=sqlserver;Database=ReliableStore;User Id=sa;Password=YourStrong@Passw0rd;TrustServerCertificate=true
     volumes:
       - ./data/order:/app/data
       - ./data/shared:/app/shared  # Shared data for cross-service coordination
     networks:
       - reliablestore-network
     depends_on:
-      - catalog-service
-      - customer-service
-      - payment-service
-      - shipping-service
+      sqlserver:
+        condition: service_healthy
+      catalog-service:
+        condition: service_started
+      customer-service:
+        condition: service_started
+      payment-service:
+        condition: service_started
+      shipping-service:
+        condition: service_started
     restart: unless-stopped
 
   payment-service:
@@ -61,10 +95,14 @@ services:
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
       - ASPNETCORE_URLS=http://+:8080
+      - ConnectionStrings__SqlServer=Server=sqlserver;Database=ReliableStore;User Id=sa;Password=YourStrong@Passw0rd;TrustServerCertificate=true
     volumes:
       - ./data/payment:/app/data
     networks:
       - reliablestore-network
+    depends_on:
+      sqlserver:
+        condition: service_healthy
     restart: unless-stopped
 
   shipping-service:
@@ -76,10 +114,14 @@ services:
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
       - ASPNETCORE_URLS=http://+:8080
+      - ConnectionStrings__SqlServer=Server=sqlserver;Database=ReliableStore;User Id=sa;Password=YourStrong@Passw0rd;TrustServerCertificate=true
     volumes:
       - ./data/shipping:/app/data
     networks:
       - reliablestore-network
+    depends_on:
+      sqlserver:
+        condition: service_healthy
     restart: unless-stopped
 
 networks:
@@ -87,6 +129,7 @@ networks:
     driver: bridge
 
 volumes:
+  sqlserver-data:
   catalog-data:
   customer-data:
   order-data:
