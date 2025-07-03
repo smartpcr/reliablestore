@@ -171,3 +171,8 @@ UpgradeLog*.htm
 # generated aci files
 **/web/aci.yml
 **/Api/aci.yml
+
+# Environment files
+.env
+.env.local
+.env.*.local

@@ -18,7 +18,6 @@ namespace Common.Persistence.Providers.SqlServer.Tests
     using Microsoft.Extensions.DependencyInjection;
     using Microsoft.Extensions.Logging;
     using Models;
-    using Testcontainers.MsSql;
     using Xunit;
     using Xunit.Abstractions;
 
@@ -26,7 +25,6 @@ namespace Common.Persistence.Providers.SqlServer.Tests
     {
         private readonly ITestOutputHelper output;
         private readonly string providerName = "SqlServerPerfTest";
-        private MsSqlContainer sqlServerContainer;
         private IServiceProvider serviceProvider;
 
         public SqlServerProviderPerformanceTests(ITestOutputHelper output)
@@ -37,15 +35,6 @@ namespace Common.Persistence.Providers.SqlServer.Tests
 
         public async Task InitializeAsync()
         {
-            // Start SQL Server container
-            this.sqlServerContainer = new MsSqlBuilder()
-                .WithImage("mcr.microsoft.com/mssql/server:2022-latest")
-                .WithPassword(Environment.GetEnvironmentVariable("DB_PASSWORD"))
-                .WithName($"sqlserver-perf-test-{Guid.NewGuid():N}")
-                .Build();
-
-            await this.sqlServerContainer.StartAsync();
-
             // Setup DI container
             var services = new ServiceCollection();
             services.AddLogging(builder => builder
@@ -61,7 +50,7 @@ namespace Common.Persistence.Providers.SqlServer.Tests
                 [$"Providers:{this.providerName}:Enabled"] = "true",
                 [$"Providers:{this.providerName}:Capabilities"] = "1",
                 [$"Providers:{this.providerName}:Host"] = "localhost",
-                [$"Providers:{this.providerName}:Port"] = this.sqlServerContainer.GetMappedPublicPort(1433).ToString(),
+                [$"Providers:{this.providerName}:Port"] = "1433",
                 [$"Providers:{this.providerName}:DbName"] = "ReliableStorePerfTest",
                 [$"Providers:{this.providerName}:UserId"] = "sa",
                 [$"Providers:{this.providerName}:Password"] = Environment.GetEnvironmentVariable("DB_PASSWORD")!,
@@ -85,7 +74,8 @@ namespace Common.Persistence.Providers.SqlServer.Tests
 
         public async Task DisposeAsync()
         {
-            await this.sqlServerContainer.DisposeAsync();
+            // Cleanup handled by GlobalAssemblyInit
+            await Task.CompletedTask;
         }
 
         [Fact]

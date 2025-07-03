@@ -3,22 +3,28 @@ version: '3.8'
 services:
   sqlserver:
     image: mcr.microsoft.com/mssql/server:2022-latest
-    container_name: sqlexpress
+    container_name: reliablestore-sqlserver-tests
     environment:
       - ACCEPT_EULA=Y
-      - MSSQL_SA_PASSWORD=YourStrong@Passw0rd
-      - MSSQL_PID=Express
+      - SA_PASSWORD=${SA_PASSWORD:-YourStrong@Passw0rd}
+      - MSSQL_PID=Developer
     ports:
       - "1433:1433"
     volumes:
-      - sqlserver_data:/var/opt/mssql
-      - ./init-scripts:/docker-entrypoint-initdb.d
-    restart: unless-stopped
+      - sqlserver-data:/var/opt/mssql
     healthcheck:
-      test: ["CMD-SHELL", "/opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P YourStrong@Passw0rd -Q 'SELECT 1' || exit 1"]
-      interval: 30s
-      timeout: 10s
+      test: ["CMD", "/opt/mssql-tools/bin/sqlcmd", "-S", "localhost", "-U", "sa", "-P", "${SA_PASSWORD:-YourStrong@Passw0rd}", "-Q", "SELECT 1"]
+      interval: 10s
+      timeout: 5s
       retries: 5
+      start_period: 20s
+    networks:
+      - reliablestore-test
+
+networks:
+  reliablestore-test:
+    driver: bridge
 
 volumes:
-  sqlserver_data:
+  sqlserver-data:
+    driver: local

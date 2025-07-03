@@ -46,8 +46,18 @@ dotnet_naming_rule.private_fields_camel_case.severity = warning
 dotnet_naming_rule.private_fields_camel_case.symbols = private_fields
 dotnet_naming_rule.private_fields_camel_case.style = camel_case_style
 
+# Enforce naming rules for private static fields without underscore
+dotnet_naming_rule.private_static_fields_camel_case.severity = warning
+dotnet_naming_rule.private_static_fields_camel_case.symbols = private_static_fields
+dotnet_naming_rule.private_static_fields_camel_case.style = camel_case_style
+
 dotnet_naming_symbols.private_fields.applicable_kinds = field
 dotnet_naming_symbols.private_fields.applicable_accessibilities = private
+dotnet_naming_symbols.private_fields.required_modifiers = 
+
+dotnet_naming_symbols.private_static_fields.applicable_kinds = field
+dotnet_naming_symbols.private_static_fields.applicable_accessibilities = private
+dotnet_naming_symbols.private_static_fields.required_modifiers = static
 
 dotnet_naming_style.camel_case_style.capitalization = camel_case
 dotnet_naming_style.camel_case_style.required_prefix = 
