@@ -17,7 +17,7 @@ ReliableStore offers a flexible, provider-based persistence architecture that al
 
 [Full Documentation →](../src/Common.Persistence.Providers.FileSystem/README.md)
 
-### 2. InMemory Provider  
+### 2. InMemory Provider
 **Best for**: Testing, caching, temporary data
 
 - **Storage**: RAM (volatile)
@@ -122,7 +122,7 @@ Start → Is data temporary?
 - Not recommended for any data over 16KB
 
 ✅ **ClusterRegistry Strengths**:
-- Fast for very small payloads (<1KB) 
+- Fast for very small payloads (<1KB)
 - Automatic high availability with Windows Failover Clustering
 - Good for small configuration values and feature flags
 - Distributed locking for cluster-wide consistency
@@ -203,11 +203,11 @@ public interface IStoreFactory
 public class StoreFactory : IStoreFactory
 {
     private readonly IConfiguration _configuration;
-    
+
     public IStore<T> CreateStore<T>(string storeName) where T : class
     {
         var providerType = _configuration[$"Storage:{storeName}:Provider"];
-        
+
         return providerType switch
         {
             "FileSystem" => CreateFileSystemStore<T>(storeName),
@@ -230,20 +230,20 @@ public class Startup
         // Volatile session data in memory
         services.AddSingleton<IStore<Session>>(
             new InMemoryStore<Session>());
-        
+
         // Product catalog in ESENT for fast queries
         services.AddSingleton<IStore<Product>>(
             new SimpleEsentProvider<Product>(esentSettings));
-        
+
         // Orders in ESENT for scalability (ClusterRegistry limited to <10K items)
         services.AddSingleton<IStore<Order>>(
             new SimpleEsentProvider<Order>(esentSettings));
-        
+
         // Small configuration in cluster registry for HA
         services.AddSingleton<IStore<ServiceConfig>>(
             new ClusterPersistenceStore<ServiceConfig>(clusterConfig));
-            
-        // Audit logs in file system for compliance  
+
+        // Audit logs in file system for compliance
         services.AddSingleton<IStore<AuditLog>>(
             new FileStore<AuditLog>("audit", fileSettings));
     }
@@ -257,27 +257,27 @@ public class CachedStore<T> : IStore<T> where T : class
     private readonly IStore<T> _persistentStore;
     private readonly IStore<T> _cacheStore;
     private readonly TimeSpan _cacheDuration;
-    
+
     public CachedStore(IStore<T> persistentStore, TimeSpan cacheDuration)
     {
         _persistentStore = persistentStore;
         _cacheStore = new InMemoryStore<T>();
         _cacheDuration = cacheDuration;
     }
-    
+
     public async Task<T> GetAsync(string key)
     {
         // Try cache first
         var cached = await _cacheStore.GetAsync(key);
         if (cached != null) return cached;
-        
+
         // Load from persistent store
         var item = await _persistentStore.GetAsync(key);
         if (item != null)
         {
             await _cacheStore.SaveAsync(key, item);
         }
-        
+
         return item;
     }
 }
@@ -290,7 +290,7 @@ public class CachedStore<T> : IStore<T> where T : class
 public class StoreMigrator<T> where T : class
 {
     public async Task MigrateAsync(
-        IStore<T> source, 
+        IStore<T> source,
         IStore<T> target,
         IProgress<int> progress = null,
         CancellationToken cancellationToken = default)
@@ -298,17 +298,17 @@ public class StoreMigrator<T> where T : class
         var items = await source.GetAllAsync();
         var total = items.Count;
         var completed = 0;
-        
+
         foreach (var batch in items.Chunk(100))
         {
             cancellationToken.ThrowIfCancellationRequested();
-            
-            var tasks = batch.Select(kvp => 
+
+            var tasks = batch.Select(kvp =>
                 target.SaveAsync(kvp.Key, kvp.Value)
             );
-            
+
             await Task.WhenAll(tasks);
-            
+
             completed += batch.Count();
             progress?.Report(completed * 100 / total);
         }
@@ -320,7 +320,7 @@ var migrator = new StoreMigrator<Product>();
 await migrator.MigrateAsync(
     source: fileStore,
     target: esentStore,
-    progress: new Progress<int>(percent => 
+    progress: new Progress<int>(percent =>
         Console.WriteLine($"Migration progress: {percent}%"))
 );
 ```
@@ -360,7 +360,7 @@ var tasks = ids.Select(id => store.GetAsync(id));
 var results = await Task.WhenAll(tasks);
 
 // Bad - blocks threads
-var results = ids.Select(id => 
+var results = ids.Select(id =>
     store.GetAsync(id).Result  // Don't do this!
 ).ToList();
 ```
@@ -382,7 +382,7 @@ public class MonitoredStore<T> : IStore<T> where T : class
 {
     private readonly IStore<T> _innerStore;
     private readonly IMetricsCollector _metrics;
-    
+
     public async Task<T> GetAsync(string key)
     {
         using var timer = _metrics.StartTimer("store.read");
@@ -414,7 +414,7 @@ public class EncryptedStore<T> : IStore<T> where T : class
 {
     private readonly IStore<T> _innerStore;
     private readonly IDataProtector _protector;
-    
+
     public async Task SaveAsync(string key, T value)
     {
         var json = JsonSerializer.Serialize(value);
@@ -423,6 +423,13 @@ public class EncryptedStore<T> : IStore<T> where T : class
     }
 }
 ```
+
+## Performance Summary
+
+- __InMemory__ is by far the fastest (as expected), with consistent ~0.47ms performance across all payload sizes and operations. However, it doesn't persist data across restarts.
+- __ESENT__ Database shows good scaling characteristics - while slower than InMemory, it maintains relatively consistent performance ratios across different payload sizes and handles large data better than FileSystem.
+- __FileSystem__ struggles significantly with larger payloads, becoming up to 19x slower than ESENT for large data operations.
+- __Windows Registry__ completely failed due to built-in size limitations - this is expected as Registry keys have strict size constraints that make them unsuitable for storing anything beyond small configuration values.
 
 ## Future Providers
 
