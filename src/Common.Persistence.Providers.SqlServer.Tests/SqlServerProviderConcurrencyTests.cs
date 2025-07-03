@@ -22,11 +22,13 @@ namespace Common.Persistence.Providers.SqlServer.Tests
     using Xunit;
     using Xunit.Abstractions;
 
-    public class SqlServerProviderConcurrencyTests : IAsyncLifetime
+    public class SqlServerProviderConcurrencyTests : IAsyncLifetime, IDisposable
     {
         private readonly ITestOutputHelper output;
         private readonly string providerName = "SqlServerConcurrencyTest";
+        private readonly string schemaName = "test2";
         private IServiceProvider serviceProvider;
+        private ICrudStorageProviderFactory? factory;
 
         public SqlServerProviderConcurrencyTests(ITestOutputHelper output)
         {
@@ -59,7 +61,8 @@ namespace Common.Persistence.Providers.SqlServer.Tests
                 [$"Providers:{this.providerName}:EnableRetryLogic"] = "true",
                 [$"Providers:{this.providerName}:MaxRetryCount"] = "3",
                 [$"Providers:{this.providerName}:CreateTableIfNotExists"] = "true",
-                [$"Providers:{this.providerName}:CreateDatabaseIfNotExists"] = "true"
+                [$"Providers:{this.providerName}:CreateDatabaseIfNotExists"] = "true",
+                [$"Providers:{this.providerName}:Schema"] = this.schemaName
             };
 
             var configuration = services.AddConfiguration(config);
@@ -71,13 +74,35 @@ namespace Common.Persistence.Providers.SqlServer.Tests
             services.AddPersistence();
 
             this.serviceProvider = services.BuildServiceProvider();
+            this.factory = this.serviceProvider.GetRequiredService<ICrudStorageProviderFactory>();
             return Task.CompletedTask;
         }
 
         public async Task DisposeAsync()
         {
-            // Cleanup handled by GlobalAssemblyInit
-            await Task.CompletedTask;
+            // Clear all data in the schema
+            await this.ClearAllTablesInSchemaAsync();
+        }
+
+        public void Dispose()
+        {
+            (this.serviceProvider as IDisposable)?.Dispose();
+        }
+
+        private async Task ClearAllTablesInSchemaAsync()
+        {
+            try
+            {
+                using var provider = this.factory?.Create<Product>(this.providerName);
+                if (provider != null)
+                {
+                    await provider.ClearAsync();
+                }
+            }
+            catch (Exception ex)
+            {
+                this.output.WriteLine($"Error clearing tables: {ex.Message}");
+            }
         }
 
         [Fact]

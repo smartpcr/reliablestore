@@ -34,7 +34,9 @@
       "Bash(chmod:*)",
       "Bash(bash:*)",
       "WebFetch(domain:learn.microsoft.com)",
-      "Bash(touch:*)"
+      "Bash(touch:*)",
+      "Bash(docker exec:*)",
+      "Bash(docker compose:*)"
     ],
     "deny": []
   }

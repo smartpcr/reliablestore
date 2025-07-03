@@ -21,13 +21,37 @@ public static class GlobalAssemblyInit
     private static bool isInitialized;
     private static Process? composeProcess;
 
-    // [ModuleInitializer]
+    [ModuleInitializer]
     public static void Initialize()
     {
         try
         {
             Console.WriteLine("GlobalAssemblyInit: Starting initialization...");
-            GlobalAssemblyInit.InitializeAsync().GetAwaiter().GetResult();
+            // Load environment variables synchronously
+            var envPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, ".env");
+            if (File.Exists(envPath))
+            {
+                Env.Load(envPath);
+                Console.WriteLine($"GlobalAssemblyInit: Loaded .env from {envPath}");
+            }
+            
+            // Start Docker Compose in background - don't wait
+            Task.Run(async () => 
+            {
+                try
+                {
+                    await StartDockerComposeAsync();
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"GlobalAssemblyInit: Background error: {ex.Message}");
+                }
+            });
+            
+            // Register cleanup on app domain unload
+            AppDomain.CurrentDomain.ProcessExit += OnProcessExit;
+            AppDomain.CurrentDomain.DomainUnload += (s, e) => OnProcessExit(s, e);
+            
             Console.WriteLine("GlobalAssemblyInit: Initialization completed.");
         }
         catch (Exception ex)
@@ -37,43 +61,6 @@ public static class GlobalAssemblyInit
         }
     }
 
-    private static async Task InitializeAsync()
-    {
-        await GlobalAssemblyInit.initializationSemaphore.WaitAsync();
-        try
-        {
-            if (GlobalAssemblyInit.isInitialized)
-            {
-                return;
-            }
-
-            Console.WriteLine("GlobalAssemblyInit: Loading environment variables...");
-            // Load environment variables
-            var envPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, ".env");
-            if (File.Exists(envPath))
-            {
-                Env.Load(envPath);
-                Console.WriteLine($"GlobalAssemblyInit: Loaded .env from {envPath}");
-            }
-            else
-            {
-                Console.WriteLine($"GlobalAssemblyInit: No .env file found at {envPath}");
-            }
-
-            // Start Docker Compose
-            Console.WriteLine("GlobalAssemblyInit: Starting Docker Compose...");
-            await GlobalAssemblyInit.StartDockerComposeAsync();
-
-            GlobalAssemblyInit.isInitialized = true;
-
-            // Register cleanup on app domain unload
-            AppDomain.CurrentDomain.ProcessExit += GlobalAssemblyInit.OnProcessExit;
-        }
-        finally
-        {
-            GlobalAssemblyInit.initializationSemaphore.Release();
-        }
-    }
 
     private static async Task StartDockerComposeAsync()
     {
@@ -81,48 +68,15 @@ public static class GlobalAssemblyInit
         var composeCommand = "compose";
         var workingDirectory = AppDomain.CurrentDomain.BaseDirectory;
 
-        // Check if container is already running
-        var checkProcess = new Process
+        // Check if container is already running and database exists
+        if (await IsContainerAndDatabaseReady(containerRuntime))
         {
-            StartInfo = new ProcessStartInfo
-            {
-                FileName = containerRuntime,
-                Arguments = "ps --filter name=reliablestore-sqlserver-tests --format \"{{.Names}}\"",
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                WorkingDirectory = workingDirectory
-            }
-        };
-
-        try
-        {
-            checkProcess.Start();
-            var output = await checkProcess.StandardOutput.ReadToEndAsync();
-            var error = await checkProcess.StandardError.ReadToEndAsync();
-            await checkProcess.WaitForExitAsync();
-
-            Console.WriteLine($"GlobalAssemblyInit: Container check output: {output}");
-            if (!string.IsNullOrWhiteSpace(error))
-            {
-                Console.WriteLine($"GlobalAssemblyInit: Container check error: {error}");
-            }
-
-            if (output.Contains("reliablestore-sqlserver-tests"))
-            {
-                Console.WriteLine("GlobalAssemblyInit: SQL Server container is already running.");
-                
-                // Wait for it to be healthy
-                await GlobalAssemblyInit.WaitForContainerHealthyAsync(containerRuntime);
-                return;
-            }
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"GlobalAssemblyInit: Error checking container status: {ex.Message}");
+            Console.WriteLine("GlobalAssemblyInit: SQL Server container and database are already ready.");
+            return;
         }
 
+        Console.WriteLine("GlobalAssemblyInit: Container or database not ready, starting Docker Compose...");
+        
         // Start Docker Compose
         GlobalAssemblyInit.composeProcess = new Process
         {
@@ -200,6 +154,93 @@ public static class GlobalAssemblyInit
         }
 
         throw new InvalidOperationException("SQL Server failed to become healthy within the timeout period.");
+    }
+
+    private static async Task<bool> IsContainerAndDatabaseReady(string containerRuntime)
+    {
+        try
+        {
+            // First check if container exists and is running
+            var checkContainerProcess = new Process
+            {
+                StartInfo = new ProcessStartInfo
+                {
+                    FileName = containerRuntime,
+                    Arguments = "ps --filter name=reliablestore-sqlserver-tests --format \"{{.State}}\"",
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                }
+            };
+
+            checkContainerProcess.Start();
+            var containerState = await checkContainerProcess.StandardOutput.ReadToEndAsync();
+            await checkContainerProcess.WaitForExitAsync();
+
+            if (!containerState.Contains("running"))
+            {
+                Console.WriteLine("GlobalAssemblyInit: Container not running.");
+                return false;
+            }
+
+            Console.WriteLine("GlobalAssemblyInit: Container is running, checking health...");
+
+            // Check if container is healthy
+            var healthProcess = new Process
+            {
+                StartInfo = new ProcessStartInfo
+                {
+                    FileName = containerRuntime,
+                    Arguments = "inspect reliablestore-sqlserver-tests --format \"{{.State.Health.Status}}\"",
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                }
+            };
+
+            healthProcess.Start();
+            var healthStatus = await healthProcess.StandardOutput.ReadToEndAsync();
+            await healthProcess.WaitForExitAsync();
+
+            if (!healthStatus.Trim().Equals("healthy", StringComparison.OrdinalIgnoreCase))
+            {
+                Console.WriteLine($"GlobalAssemblyInit: Container not healthy: {healthStatus.Trim()}");
+                return false;
+            }
+
+            Console.WriteLine("GlobalAssemblyInit: Container is healthy, checking database...");
+
+            // Check if database exists
+            var password = Environment.GetEnvironmentVariable("SA_PASSWORD") ?? "YourStrong@Passw0rd";
+            var checkDbProcess = new Process
+            {
+                StartInfo = new ProcessStartInfo
+                {
+                    FileName = containerRuntime,
+                    Arguments = $"exec reliablestore-sqlserver-tests /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"{password}\" -C -Q \"IF DB_ID(N'ReliableStoreTest') IS NOT NULL SELECT 'EXISTS' ELSE SELECT 'NOT_EXISTS'\"",
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                }
+            };
+
+            checkDbProcess.Start();
+            var dbOutput = await checkDbProcess.StandardOutput.ReadToEndAsync();
+            await checkDbProcess.WaitForExitAsync();
+
+            var dbExists = dbOutput.Contains("EXISTS") && !dbOutput.Contains("NOT_EXISTS");
+            Console.WriteLine($"GlobalAssemblyInit: Database exists: {dbExists}");
+
+            return dbExists;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"GlobalAssemblyInit: Error checking container/database status: {ex.Message}");
+            return false;
+        }
     }
 
     private static string GetContainerRuntime()

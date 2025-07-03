@@ -34,6 +34,8 @@ namespace Common.Persistence.Providers.SqlServer
 
         public bool CreateDatabaseIfNotExists { get; set; } = true;
 
+        public string Schema { get; set; } = "dbo";
+
         public string GetConnectionString()
         {
             return $"Server={this.Host},{this.Port};Database={this.DbName};User Id={this.UserId};Password={this.Password};TrustServerCertificate=true";

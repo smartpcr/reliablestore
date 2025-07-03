@@ -24,6 +24,8 @@ namespace Common.Persistence.Providers.SqlServer
         private readonly ILogger<SqlServerProvider<T>> logger;
         private readonly string connectionString;
         private readonly string tableName;
+        private readonly string schemaName;
+        private readonly string fullTableName;
         private readonly SemaphoreSlim initLock = new(1, 1);
         private bool initialized;
 
@@ -35,6 +37,8 @@ namespace Common.Persistence.Providers.SqlServer
             this.logger = this.GetLogger<SqlServerProvider<T>>();
             this.connectionString = this.settings.GetConnectionString();
             this.tableName = $"{typeof(T).Name}";
+            this.schemaName = string.IsNullOrWhiteSpace(this.settings.Schema) ? "dbo" : this.settings.Schema;
+            this.fullTableName = $"[{this.schemaName}].[{this.tableName}]";
         }
 
         public SqlServerProvider(UnityContainer container, string name)
@@ -45,6 +49,8 @@ namespace Common.Persistence.Providers.SqlServer
             this.logger = this.GetLogger<SqlServerProvider<T>>();
             this.connectionString = this.settings.GetConnectionString();
             this.tableName = $"{typeof(T).Name}";
+            this.schemaName = string.IsNullOrWhiteSpace(this.settings.Schema) ? "dbo" : this.settings.Schema;
+            this.fullTableName = $"[{this.schemaName}].[{this.tableName}]";
         }
 
         private async Task EnsureInitializedAsync(CancellationToken cancellationToken = default)
@@ -60,6 +66,8 @@ namespace Common.Persistence.Providers.SqlServer
                 {
                     await this.CreateDatabaseIfNotExistsAsync(cancellationToken);
                 }
+
+                await this.CreateSchemaIfNotExistsAsync(cancellationToken);
 
                 if (this.settings.CreateTableIfNotExists)
                 {
@@ -99,12 +107,38 @@ namespace Common.Persistence.Providers.SqlServer
             }
         }
 
+        private async Task CreateSchemaIfNotExistsAsync(CancellationToken cancellationToken)
+        {
+            if (this.schemaName.Equals("dbo", StringComparison.OrdinalIgnoreCase))
+            {
+                return; // dbo schema always exists
+            }
+
+            const string createSchemaSql = @"
+                IF NOT EXISTS (SELECT * FROM sys.schemas WHERE name = @SchemaName)
+                BEGIN
+                    EXEC('CREATE SCHEMA [' + @SchemaName + ']')
+                END";
+
+            await using var connection = new SqlConnection(this.connectionString);
+            await connection.OpenAsync(cancellationToken);
+
+            await using var command = new SqlCommand(createSchemaSql, connection);
+            command.Parameters.AddWithValue("@SchemaName", this.schemaName);
+            command.CommandTimeout = this.settings.CommandTimeout;
+
+            await command.ExecuteNonQueryAsync(cancellationToken);
+            this.logger.LogInformation("Ensured schema {SchemaName} exists", this.schemaName);
+        }
+
         private async Task CreateTableIfNotExistsAsync(CancellationToken cancellationToken)
         {
             const string createTableSql = @"
-                IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = @TableName)
+                IF NOT EXISTS (SELECT * FROM sys.tables t 
+                               JOIN sys.schemas s ON t.schema_id = s.schema_id 
+                               WHERE t.name = @TableName AND s.name = @SchemaName)
                 BEGIN
-                    CREATE TABLE [{0}] (
+                    CREATE TABLE {0} (
                         [Key] NVARCHAR(450) NOT NULL PRIMARY KEY,
                         [Data] NVARCHAR(MAX) NOT NULL,
                         [Version] BIGINT NOT NULL,
@@ -113,19 +147,20 @@ namespace Common.Persistence.Providers.SqlServer
                         [UpdatedAt] DATETIME2 NOT NULL DEFAULT GETUTCDATE()
                     )
 
-                    CREATE INDEX IX_{0}_Version ON [{0}] ([Version])
-                    CREATE INDEX IX_{0}_UpdatedAt ON [{0}] ([UpdatedAt])
+                    CREATE INDEX IX_{1}_{2}_Version ON {0} ([Version])
+                    CREATE INDEX IX_{1}_{2}_UpdatedAt ON {0} ([UpdatedAt])
                 END";
 
             await using var connection = new SqlConnection(this.connectionString);
             await connection.OpenAsync(cancellationToken);
 
-            await using var command = new SqlCommand(string.Format(createTableSql, this.tableName), connection);
+            await using var command = new SqlCommand(string.Format(createTableSql, this.fullTableName, this.schemaName, this.tableName), connection);
             command.Parameters.AddWithValue("@TableName", this.tableName);
+            command.Parameters.AddWithValue("@SchemaName", this.schemaName);
             command.CommandTimeout = this.settings.CommandTimeout;
 
             await command.ExecuteNonQueryAsync(cancellationToken);
-            this.logger.LogInformation("Ensured table {TableName} exists", this.tableName);
+            this.logger.LogInformation("Ensured table {FullTableName} exists", this.fullTableName);
         }
 
         public async Task<T?> GetAsync(string key, CancellationToken cancellationToken = default)
@@ -135,7 +170,7 @@ namespace Common.Persistence.Providers.SqlServer
             await using var connection = new SqlConnection(this.connectionString);
             await connection.OpenAsync(cancellationToken);
 
-            await using var command = new SqlCommand($"SELECT [Data] FROM [{this.tableName}] WHERE [Key] = @Key", connection);
+            await using var command = new SqlCommand($"SELECT [Data] FROM {this.fullTableName} WHERE [Key] = @Key", connection);
             command.Parameters.AddWithValue("@Key", key);
             command.CommandTimeout = this.settings.CommandTimeout;
 
@@ -163,7 +198,7 @@ namespace Common.Persistence.Providers.SqlServer
             await connection.OpenAsync(cancellationToken);
 
             var paramNames = keyList.Select((_, i) => $"@key{i}").ToList();
-            var sql = $"SELECT [Data] FROM [{this.tableName}] WHERE [Key] IN ({string.Join(",", paramNames)})";
+            var sql = $"SELECT [Data] FROM {this.fullTableName} WHERE [Key] IN ({string.Join(",", paramNames)})";
 
             await using var command = new SqlCommand(sql, connection);
             for (var i = 0; i < keyList.Count; i++)
@@ -194,7 +229,7 @@ namespace Common.Persistence.Providers.SqlServer
             await using var connection = new SqlConnection(this.connectionString);
             await connection.OpenAsync(cancellationToken);
 
-            var sql = $"SELECT [Data] FROM [{this.tableName}]";
+            var sql = $"SELECT [Data] FROM {this.fullTableName}";
             await using var command = new SqlCommand(sql, connection);
             command.CommandTimeout = this.settings.CommandTimeout;
 
@@ -229,7 +264,7 @@ namespace Common.Persistence.Providers.SqlServer
             await connection.OpenAsync(cancellationToken);
 
             var sql = $@"
-                MERGE [{this.tableName}] AS target
+                MERGE {this.fullTableName} AS target
                 USING (SELECT @Key AS [Key]) AS source
                 ON target.[Key] = source.[Key]
                 WHEN MATCHED THEN
@@ -275,7 +310,7 @@ namespace Common.Persistence.Providers.SqlServer
                     var json = JsonConvert.SerializeObject(kvp.Value);
 
                     var sql = $@"
-                        MERGE [{this.tableName}] AS target
+                        MERGE {this.fullTableName} AS target
                         USING (SELECT @Key AS [Key]) AS source
                         ON target.[Key] = source.[Key]
                         WHEN MATCHED THEN
@@ -315,7 +350,7 @@ namespace Common.Persistence.Providers.SqlServer
             await using var connection = new SqlConnection(this.connectionString);
             await connection.OpenAsync(cancellationToken);
 
-            await using var command = new SqlCommand($"DELETE FROM [{this.tableName}] WHERE [Key] = @Key", connection);
+            await using var command = new SqlCommand($"DELETE FROM {this.fullTableName} WHERE [Key] = @Key", connection);
             command.Parameters.AddWithValue("@Key", key);
             command.CommandTimeout = this.settings.CommandTimeout;
 
@@ -334,7 +369,7 @@ namespace Common.Persistence.Providers.SqlServer
             await using var connection = new SqlConnection(this.connectionString);
             await connection.OpenAsync(cancellationToken);
 
-            await using var command = new SqlCommand($"SELECT COUNT(1) FROM [{this.tableName}] WHERE [Key] = @Key", connection);
+            await using var command = new SqlCommand($"SELECT COUNT(1) FROM {this.fullTableName} WHERE [Key] = @Key", connection);
             command.Parameters.AddWithValue("@Key", key);
             command.CommandTimeout = this.settings.CommandTimeout;
 
@@ -351,7 +386,7 @@ namespace Common.Persistence.Providers.SqlServer
                 await using var connection = new SqlConnection(this.connectionString);
                 await connection.OpenAsync(cancellationToken);
 
-                await using var command = new SqlCommand($"SELECT COUNT(1) FROM [{this.tableName}]", connection);
+                await using var command = new SqlCommand($"SELECT COUNT(1) FROM {this.fullTableName}", connection);
                 command.CommandTimeout = this.settings.CommandTimeout;
 
                 return Convert.ToInt64(await command.ExecuteScalarAsync(cancellationToken));
@@ -371,7 +406,7 @@ namespace Common.Persistence.Providers.SqlServer
             await using var connection = new SqlConnection(this.connectionString);
             await connection.OpenAsync(cancellationToken);
 
-            await using var command = new SqlCommand($"DELETE FROM [{this.tableName}]; SELECT @@ROWCOUNT", connection);
+            await using var command = new SqlCommand($"DELETE FROM {this.fullTableName}; SELECT @@ROWCOUNT", connection);
             command.CommandTimeout = this.settings.CommandTimeout;
 
             var rowsDeleted = Convert.ToInt64(await command.ExecuteScalarAsync(cancellationToken));
