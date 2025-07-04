@@ -24,6 +24,8 @@ namespace Common.Persistence.Benchmarks
     using Common.Persistence.Providers.ClusterRegistry;
     using Common.Persistence.Providers.FileSystem;
     using Common.Persistence.Providers.InMemory;
+    using Common.Persistence.Providers.SqlServer;
+    using Common.Persistence.Providers.SQLite;
     using Microsoft.Extensions.DependencyInjection;
     using Microsoft.Extensions.Logging;
     using Models;
@@ -44,7 +46,9 @@ namespace Common.Persistence.Benchmarks
             InMemory,
             FileSystem,
             Esent,
-            ClusterRegistry
+            ClusterRegistry,
+            SqlServer,
+            SQLite
         }
 
         public enum PayloadSizes
@@ -60,7 +64,7 @@ namespace Common.Persistence.Benchmarks
         [Params(PayloadSizes.Small, PayloadSizes.Medium, PayloadSizes.Large)]
         public PayloadSizes PayloadSize { get; set; }
 
-        [Params(ProviderTypes.InMemory, ProviderTypes.FileSystem, ProviderTypes.Esent, ProviderTypes.ClusterRegistry)]
+        [Params(ProviderTypes.InMemory, ProviderTypes.FileSystem, ProviderTypes.Esent, ProviderTypes.ClusterRegistry, ProviderTypes.SqlServer, ProviderTypes.SQLite)]
         public ProviderTypes ProviderType { get; set; }
 
         [Params(8, 16)]
@@ -94,6 +98,10 @@ namespace Common.Persistence.Benchmarks
             services.AddKeyedSingleton<CrudStorageProviderSettings>("Esent", (_, _) => esentSettings);
             var clusterRegistrySettings = configuration.GetConfiguredSettings<ClusterRegistryStoreSettings>($"Providers:ClusterRegistry");
             services.AddKeyedSingleton<CrudStorageProviderSettings>("ClusterRegistry", (_, _) => clusterRegistrySettings);
+            var sqlServerSettings = configuration.GetConfiguredSettings<SqlServerProviderSettings>("Providers:SqlServer");
+            services.AddKeyedSingleton<CrudStorageProviderSettings>("SqlServer", (_, _) => sqlServerSettings);
+            var sqliteSettings = configuration.GetConfiguredSettings<SQLiteProviderSettings>("Providers:SQLite");
+            services.AddKeyedSingleton<CrudStorageProviderSettings>("SQLite", (_, _) => sqliteSettings);
 
             // Register providers
             services.AddPersistence();
@@ -138,6 +146,20 @@ namespace Common.Persistence.Benchmarks
                 try
                 {
                     Microsoft.Win32.Registry.LocalMachine.DeleteSubKeyTree(@"Software\BenchmarkTests", false);
+                }
+                catch { }
+            }
+
+            // Cleanup SQL Server database
+            if (ProviderType == ProviderTypes.SqlServer)
+            {
+                try
+                {
+                    using var connection = new Microsoft.Data.SqlClient.SqlConnection("Server=localhost;Database=master;User Id=sa;Password=YourStrong@Passw0rd;TrustServerCertificate=true");
+                    connection.Open();
+                    using var cmd = connection.CreateCommand();
+                    cmd.CommandText = "IF DB_ID('ReliableStoreBenchmark') IS NOT NULL DROP DATABASE [ReliableStoreBenchmark]";
+                    cmd.ExecuteNonQuery();
                 }
                 catch { }
             }
@@ -263,6 +285,31 @@ namespace Common.Persistence.Benchmarks
             config["Providers:ClusterRegistry:RetryCount"] = "3";
             config["Providers:ClusterRegistry:RetryDelayMilliseconds"] = "100";
             config["Providers:ClusterRegistry:Enabled"] = "true";
+
+            // SQL Server provider config
+            config["Providers:SqlServer:Name"] = "SqlServer";
+            config["Providers:SqlServer:ConnectionString"] = "Server=localhost;Database=ReliableStoreBenchmark;User Id=sa;Password=YourStrong@Passw0rd;TrustServerCertificate=true";
+            config["Providers:SqlServer:Schema"] = "benchmark";
+            config["Providers:SqlServer:CommandTimeout"] = "300";
+            config["Providers:SqlServer:CreateTableIfNotExists"] = "true";
+            config["Providers:SqlServer:Enabled"] = "true";
+            config["Providers:SqlServer:AssemblyName"] = "CRP.Common.Persistence.Providers.SqlServer";
+            config["Providers:SqlServer:TypeName"] = "Common.Persistence.Providers.SqlServer.SqlServerProvider`1";
+            config["Providers:SqlServer:Capabilities"] = "1";
+
+            // SQLite provider config
+            config["Providers:SQLite:Name"] = "SQLite";
+            config["Providers:SQLite:DataSource"] = Path.Combine(tempDirectory, "SQLite", "benchmark.db");
+            config["Providers:SQLite:Schema"] = "benchmark";
+            config["Providers:SQLite:Mode"] = "ReadWriteCreate";
+            config["Providers:SQLite:Cache"] = "Shared";
+            config["Providers:SQLite:ForeignKeys"] = "true";
+            config["Providers:SQLite:CommandTimeout"] = "300";
+            config["Providers:SQLite:CreateTableIfNotExists"] = "true";
+            config["Providers:SQLite:Enabled"] = "true";
+            config["Providers:SQLite:AssemblyName"] = "CRP.Common.Persistence.Providers.SQLite";
+            config["Providers:SQLite:TypeName"] = "Common.Persistence.Providers.SQLite.SQLiteProvider`1";
+            config["Providers:SQLite:Capabilities"] = "1";
 
             return config;
         }

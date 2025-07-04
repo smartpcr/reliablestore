@@ -21,6 +21,8 @@
     <ProjectReference Include="..\Common.Persistence.Providers.InMemory\Common.Persistence.Providers.InMemory.csproj" />
     <ProjectReference Include="..\Common.Persistence.Providers.Esent\Common.Persistence.Providers.Esent.csproj" />
     <ProjectReference Include="..\Common.Persistence.Providers.ClusterRegistry\Common.Persistence.Providers.ClusterRegistry.csproj" />
+    <ProjectReference Include="..\Common.Persistence.Providers.SqlServer\Common.Persistence.Providers.SqlServer.csproj" />
+    <ProjectReference Include="..\Common.Persistence.Providers.SQLite\Common.Persistence.Providers.SQLite.csproj" />
     <ProjectReference Include="..\poc\Models\Models.csproj" />
   </ItemGroup>
 

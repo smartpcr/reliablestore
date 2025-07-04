@@ -22,4 +22,18 @@ namespace Common.Persistence.Providers.ClusterRegistry.Tests
             }
         }
     }
+
+    /// <summary>
+    /// Custom Theory attribute that skips tests on non-Windows platforms.
+    /// </summary>
+    public class WindowsOnlyTheoryAttribute : TheoryAttribute
+    {
+        public WindowsOnlyTheoryAttribute()
+        {
+            if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                this.Skip = "Windows Failover Cluster Registry is only available on Windows";
+            }
+        }
+    }
 }
