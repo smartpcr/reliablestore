@@ -84,6 +84,18 @@ namespace Common.Persistence.Providers.ClusterRegistry.Registry
             this.key.SetValue(valueName, value, RegistryValueKind.String);
         }
 
+        public byte[]? GetBinaryValue(string valueName)
+        {
+            this.ThrowIfDisposed();
+            return this.key.GetValue(valueName) as byte[];
+        }
+
+        public void SetBinaryValue(string valueName, byte[] value)
+        {
+            this.ThrowIfDisposed();
+            this.key.SetValue(valueName, value, RegistryValueKind.Binary);
+        }
+
         public void DeleteValue(string valueName)
         {
             this.ThrowIfDisposed();

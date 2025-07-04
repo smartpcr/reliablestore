@@ -14,7 +14,6 @@ using System.Text;
 using System.Threading.Tasks;
 using AwesomeAssertions;
 using Common.Persistence.Configuration;
-using Common.Persistence.Contract;
 using Common.Persistence.Factory;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -61,7 +60,7 @@ public class ClusterRegistryProviderPayloadSizeTests : IDisposable
     [InlineData(5120, false)]   // 5MB - should fail
     [InlineData(10240, false)]  // 10MB - should fail
     [InlineData(20480, false)]  // 20MB - should fail
-    public async Task SaveAsync_VariousPayloadSizes_ShouldRespectSizeLimit(int sizeInKB, bool shouldSucceed)
+    public async Task SaveAsync_VariousPayloadSizes_ShouldRespectSizeLimit(int sizeInKb, bool shouldSucceed)
     {
         // Arrange
         var settings = new ClusterRegistryStoreSettings
@@ -73,7 +72,7 @@ public class ClusterRegistryProviderPayloadSizeTests : IDisposable
             FallbackToLocalRegistry = true
         };
 
-        var providerName = $"payload-size-test-{sizeInKB}kb";
+        var providerName = $"payload-size-test-{sizeInKb}kb";
 
         // Register settings for this provider
         var services = new ServiceCollection();
@@ -98,7 +97,7 @@ public class ClusterRegistryProviderPayloadSizeTests : IDisposable
         {
             Id = "test-product",
             Name = "Large Product",
-            Description = this.GenerateRandomString(sizeInKB * 1024), // Generate string of specified size
+            Description = this.GenerateRandomString(sizeInKb * 1024), // Generate string of specified size
             Price = 99.99m,
             Quantity = 1
         };

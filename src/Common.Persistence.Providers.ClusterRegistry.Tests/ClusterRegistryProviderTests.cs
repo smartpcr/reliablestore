@@ -43,7 +43,7 @@ namespace Common.Persistence.Providers.ClusterRegistry.Tests
             settings.ServiceName.Should().Be("TestSvc");
             settings.RootPath.Should().Be(@"Software\Microsoft\ReliableStore");
             settings.EnableCompression.Should().BeTrue();
-            settings.MaxValueSizeKB.Should().Be(64);
+            settings.MaxValueSizeKB.Should().Be(1024 * 15); // 15MB
             settings.ConnectionTimeoutSeconds.Should().Be(30);
             settings.RetryCount.Should().Be(3);
             settings.RetryDelayMilliseconds.Should().Be(100);
@@ -81,7 +81,7 @@ namespace Common.Persistence.Providers.ClusterRegistry.Tests
             act.Should().Throw<Exception>();
         }
 
-        [Fact]
+        [WindowsOnlyFact]
         public void KeyHashing_ShouldBeConsistent()
         {
             // Arrange

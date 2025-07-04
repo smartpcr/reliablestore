@@ -238,6 +238,118 @@ namespace Common.Persistence.Providers.ClusterRegistry.Api
         }
 
         /// <summary>
+        /// Sets a binary value in the registry.
+        /// </summary>
+        /// <param name="valueName">The name of the value.</param>
+        /// <param name="value">The binary value to set.</param>
+        /// <exception cref="ClusterPersistenceException">Thrown when the operation fails.</exception>
+        public void SetBinaryValue(string valueName, byte[] value)
+        {
+            if (valueName == null)
+            {
+                throw new ArgumentNullException(nameof(valueName));
+            }
+
+            if (value == null)
+            {
+                throw new ArgumentNullException(nameof(value));
+            }
+
+            var data = IntPtr.Zero;
+            try
+            {
+                data = Marshal.AllocHGlobal(value.Length);
+                Marshal.Copy(value, 0, data, value.Length);
+
+                var result = ClusterApiInterop.ClusterRegSetValue(
+                    this,
+                    valueName,
+                    ClusterRegistryValueType.Binary,
+                    data,
+                    value.Length);
+
+                if (result != (int)ClusterErrorCode.Success)
+                {
+                    var error = result;
+                    throw new ClusterPersistenceException($"Failed to set binary value '{valueName}'. Error: {error}", new Win32Exception(error));
+                }
+            }
+            finally
+            {
+                if (data != IntPtr.Zero)
+                {
+                    Marshal.FreeHGlobal(data);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Gets a binary value from the registry.
+        /// </summary>
+        /// <param name="valueName">The name of the value.</param>
+        /// <returns>The binary value, or null if the value doesn't exist.</returns>
+        /// <exception cref="ClusterPersistenceException">Thrown when the operation fails.</exception>
+        public byte[]? GetBinaryValue(string valueName)
+        {
+            if (valueName == null)
+            {
+                throw new ArgumentNullException(nameof(valueName));
+            }
+
+            var dataSize = 0;
+
+            // First call to get the required buffer size
+            var result = ClusterApiInterop.ClusterRegQueryValue(
+                this,
+                valueName,
+                out var valueType,
+                IntPtr.Zero,
+                ref dataSize);
+
+            if (result == (int)ClusterErrorCode.FileNotFound)
+            {
+                return null; // Value doesn't exist
+            }
+
+            if (result != (int)ClusterErrorCode.MoreData && result != (int)ClusterErrorCode.Success)
+            {
+                var error = result;
+                throw new ClusterPersistenceException($"Failed to query binary value '{valueName}'. Error: {error}", new Win32Exception(error));
+            }
+
+            if (dataSize == 0)
+            {
+                return Array.Empty<byte>();
+            }
+
+            // Second call to get the actual data
+            var data = Marshal.AllocHGlobal(dataSize);
+            try
+            {
+                result = ClusterApiInterop.ClusterRegQueryValue(
+                    this,
+                    valueName,
+                    out valueType,
+                    data,
+                    ref dataSize);
+
+                if (result != (int)ClusterErrorCode.Success)
+                {
+                    var error = result;
+                    throw new ClusterPersistenceException($"Failed to get binary value '{valueName}'. Error: {error}", new Win32Exception(error));
+                }
+
+                var bytes = new byte[dataSize];
+                Marshal.Copy(data, bytes, 0, dataSize);
+                return bytes;
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(data);
+            }
+        }
+
+        /// <summary>
         /// Deletes a value from the registry.
         /// </summary>
         /// <param name="valueName">The name of the value to delete.</param>

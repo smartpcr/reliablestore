@@ -21,7 +21,7 @@ namespace Common.Persistence.Providers.ClusterRegistry
     using Unity;
 
     [SupportedOSPlatform("windows")]
-    public partial class ClusterRegistryProvider<T> : BaseProvider<T>, ICrudStorageProvider<T>, IDisposable where T : IEntity
+    public partial class ClusterRegistryProvider<T> : ICrudStorageProvider<T> where T : IEntity
     {
         private readonly ClusterRegistryStoreSettings storeSettings;
         private readonly ILogger<ClusterRegistryProvider<T>> logger;
@@ -102,16 +102,13 @@ namespace Common.Persistence.Providers.ClusterRegistry
                 using var collectionKey = await this.GetOrCreateCollectionKeyAsync(cancellationToken);
                 var hashedKey = this.CreateKeyHash(key);
 
-                // Get the value as string (it's base64 encoded serialized data)
-                var encodedData = collectionKey.GetStringValue(hashedKey);
+                // Get the value as binary data
+                var data = collectionKey.GetBinaryValue(hashedKey);
 
-                if (encodedData == null)
+                if (data == null)
                 {
                     return default(T);
                 }
-
-                // Convert from base64 to bytes
-                var data = Convert.FromBase64String(encodedData);
 
                 // Deserialize the data
                 return await this.Serializer.DeserializeAsync(data, cancellationToken);
@@ -135,18 +132,14 @@ namespace Common.Persistence.Providers.ClusterRegistry
                 // Serialize the entity
                 var data = await this.Serializer.SerializeAsync(entity, cancellationToken);
 
-                // Convert to base64 for storage as string
-                var encodedData = Convert.ToBase64String(data);
-
-                // Check size limit (base64 is ~33% larger)
-                var encodedSize = encodedData.Length * sizeof(char);
-                if (encodedSize > this.storeSettings.MaxValueSizeKB * 1024)
+                // Check size limit
+                if (data.Length > this.storeSettings.MaxValueSizeKB * 1024)
                 {
-                    throw new InvalidOperationException($"Value size {encodedSize} bytes exceeds maximum {this.storeSettings.MaxValueSizeKB}KB");
+                    throw new InvalidOperationException($"Value size {data.Length} bytes exceeds maximum {this.storeSettings.MaxValueSizeKB}KB");
                 }
 
-                // Save to registry
-                collectionKey.SetStringValue(hashedKey, encodedData);
+                // Save to registry as binary
+                collectionKey.SetBinaryValue(hashedKey, data);
 
                 this.logger.LogDebug("Saved entity with key {Key} to cluster registry", key);
             }
@@ -173,10 +166,9 @@ namespace Common.Persistence.Providers.ClusterRegistry
                 {
                     try
                     {
-                        var encodedData = collectionKey.GetStringValue(valueName);
-                        if (encodedData != null)
+                        var data = collectionKey.GetBinaryValue(valueName);
+                        if (data != null)
                         {
-                            var data = Convert.FromBase64String(encodedData);
                             var entity = await this.Serializer.DeserializeAsync(data, cancellationToken);
                             if (entity != null && (predicate == null || predicate.Compile()(entity)))
                             {
