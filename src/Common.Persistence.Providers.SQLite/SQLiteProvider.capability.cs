@@ -6,8 +6,9 @@
 
 namespace Common.Persistence.Providers.SQLite
 {
-    public class SQLiteProvider_capability
+    using Common.Persistence.Contract;
+
+    public partial class SQLiteProvider<T> : BaseProvider<T>, IPersistenceProvider<T> where T : IEntity
     {
-        
     }
 }
