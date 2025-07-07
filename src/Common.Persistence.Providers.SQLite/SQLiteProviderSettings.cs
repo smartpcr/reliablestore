@@ -60,9 +60,18 @@ namespace Common.Persistence.Providers.SQLite
         /// </summary>
         public string GetConnectionString()
         {
+            var dataSource = this.DataSource;
+            
+            // Convert relative paths to absolute paths (except for :memory:)
+            if (!dataSource.Equals(":memory:", StringComparison.OrdinalIgnoreCase) && 
+                !System.IO.Path.IsPathRooted(dataSource))
+            {
+                dataSource = System.IO.Path.Combine(System.IO.Directory.GetCurrentDirectory(), dataSource);
+            }
+            
             var builder = new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder
             {
-                DataSource = this.DataSource,
+                DataSource = dataSource,
                 Mode = Enum.Parse<Microsoft.Data.Sqlite.SqliteOpenMode>(this.Mode),
                 Cache = Enum.Parse<Microsoft.Data.Sqlite.SqliteCacheMode>(this.Cache),
                 ForeignKeys = this.ForeignKeys,

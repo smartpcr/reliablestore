@@ -36,7 +36,9 @@
       "WebFetch(domain:learn.microsoft.com)",
       "Bash(touch:*)",
       "Bash(docker exec:*)",
-      "Bash(docker compose:*)"
+      "Bash(docker compose:*)",
+      "Bash(dotnet run:*)",
+      "Bash(dotnet new:*)"
     ],
     "deny": []
   }

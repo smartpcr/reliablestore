@@ -8,6 +8,7 @@ namespace Common.Persistence.Providers.SQLite
 {
     using System;
     using System.Collections.Generic;
+    using System.IO;
     using System.Linq;
     using System.Linq.Expressions;
     using System.Threading;
@@ -61,6 +62,17 @@ namespace Common.Persistence.Providers.SQLite
             try
             {
                 if (this.initialized) return;
+
+                // Ensure the directory exists if using a file-based database
+                if (!this.settings.DataSource.Equals(":memory:", StringComparison.OrdinalIgnoreCase))
+                {
+                    var directory = Path.GetDirectoryName(this.settings.DataSource);
+                    if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
+                    {
+                        Directory.CreateDirectory(directory);
+                        this.logger.LogInformation("Created directory for SQLite database: {Directory}", directory);
+                    }
+                }
 
                 if (this.settings.CreateTableIfNotExists)
                 {

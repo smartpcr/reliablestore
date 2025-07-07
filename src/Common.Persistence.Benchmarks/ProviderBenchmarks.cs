@@ -26,6 +26,7 @@ namespace Common.Persistence.Benchmarks
     using Common.Persistence.Providers.InMemory;
     using Common.Persistence.Providers.SqlServer;
     using Common.Persistence.Providers.SQLite;
+    using DotNetEnv;
     using Microsoft.Extensions.DependencyInjection;
     using Microsoft.Extensions.Logging;
     using Models;
@@ -58,22 +59,22 @@ namespace Common.Persistence.Benchmarks
             Large
         }
 
-        [Params(200)]
+        [Params(50)]
         public int OperationCount { get; set; }
 
         [Params(PayloadSizes.Small, PayloadSizes.Medium, PayloadSizes.Large)]
         public PayloadSizes PayloadSize { get; set; }
 
-        [Params(ProviderTypes.InMemory, ProviderTypes.FileSystem, ProviderTypes.Esent, ProviderTypes.ClusterRegistry, ProviderTypes.SqlServer, ProviderTypes.SQLite)]
+        [Params(ProviderTypes.SQLite)]
         public ProviderTypes ProviderType { get; set; }
 
-        [Params(8, 16)]
+        [Params(8)]
         public int CoreCount { get; set; }
 
         [GlobalSetup]
         public void GlobalSetup()
         {
-            // Skip non-Windows providers on non-Windows platforms
+            Env.Load(); // Skip non-Windows providers on non-Windows platforms
             if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows) &&
                 (ProviderType == ProviderTypes.Esent || ProviderType == ProviderTypes.ClusterRegistry))
             {
@@ -98,8 +99,12 @@ namespace Common.Persistence.Benchmarks
             services.AddKeyedSingleton<CrudStorageProviderSettings>("Esent", (_, _) => esentSettings);
             var clusterRegistrySettings = configuration.GetConfiguredSettings<ClusterRegistryStoreSettings>($"Providers:ClusterRegistry");
             services.AddKeyedSingleton<CrudStorageProviderSettings>("ClusterRegistry", (_, _) => clusterRegistrySettings);
+
             var sqlServerSettings = configuration.GetConfiguredSettings<SqlServerProviderSettings>("Providers:SqlServer");
             services.AddKeyedSingleton<CrudStorageProviderSettings>("SqlServer", (_, _) => sqlServerSettings);
+            // add settings from .env file
+
+
             var sqliteSettings = configuration.GetConfiguredSettings<SQLiteProviderSettings>("Providers:SQLite");
             services.AddKeyedSingleton<CrudStorageProviderSettings>("SQLite", (_, _) => sqliteSettings);
 
@@ -288,7 +293,6 @@ namespace Common.Persistence.Benchmarks
 
             // SQL Server provider config
             config["Providers:SqlServer:Name"] = "SqlServer";
-            config["Providers:SqlServer:ConnectionString"] = "Server=localhost;Database=ReliableStoreBenchmark;User Id=sa;Password=YourStrong@Passw0rd;TrustServerCertificate=true";
             config["Providers:SqlServer:Schema"] = "benchmark";
             config["Providers:SqlServer:CommandTimeout"] = "300";
             config["Providers:SqlServer:CreateTableIfNotExists"] = "true";
@@ -296,6 +300,11 @@ namespace Common.Persistence.Benchmarks
             config["Providers:SqlServer:AssemblyName"] = "CRP.Common.Persistence.Providers.SqlServer";
             config["Providers:SqlServer:TypeName"] = "Common.Persistence.Providers.SqlServer.SqlServerProvider`1";
             config["Providers:SqlServer:Capabilities"] = "1";
+            config["Providers:SqlServer:Host"] = Environment.GetEnvironmentVariable("DB_HOST")!;
+            config["Providers:SqlServer:Port"] = Environment.GetEnvironmentVariable("DB_PORT")!;
+            config["Providers:SqlServer:DbName"] = Environment.GetEnvironmentVariable("DB_NAME")!;
+            config["Providers:SqlServer:UserId"] = Environment.GetEnvironmentVariable("DB_USER")!;
+            config["Providers:SqlServer:Password"] = Environment.GetEnvironmentVariable("DB_PASSWORD")!;
 
             // SQLite provider config
             config["Providers:SQLite:Name"] = "SQLite";

@@ -62,6 +62,9 @@ namespace Common.Persistence.Providers.SqlServer
             {
                 if (this.initialized) return;
 
+                // Test connection first with a shorter timeout
+                await this.TestConnectionAsync(cancellationToken);
+
                 await this.CreateSchemaIfNotExistsAsync(cancellationToken);
 
                 if (this.settings.CreateTableIfNotExists)
@@ -74,6 +77,41 @@ namespace Common.Persistence.Providers.SqlServer
             finally
             {
                 this.initLock.Release();
+            }
+        }
+
+        private async Task TestConnectionAsync(CancellationToken cancellationToken)
+        {
+            try
+            {
+                // Create a connection string with a shorter timeout for testing
+                var builder = new SqlConnectionStringBuilder(this.connectionString)
+                {
+                    ConnectTimeout = 5 // Quick test timeout
+                };
+                
+                await using var connection = new SqlConnection(builder.ConnectionString);
+                await connection.OpenAsync(cancellationToken);
+                this.logger.LogInformation("Successfully connected to SQL Server at {Host}:{Port}", this.settings.Host, this.settings.Port);
+            }
+            catch (SqlException ex)
+            {
+                this.logger.LogError(ex, "Failed to connect to SQL Server at {Host}:{Port}", this.settings.Host, this.settings.Port);
+                var authMode = this.settings.IntegratedSecurity ? "Windows Authentication" : "SQL Server Authentication";
+                throw new InvalidOperationException(
+                    $"Cannot connect to SQL Server at {this.settings.Host}:{this.settings.Port} using {authMode}. " +
+                    "Please ensure:\n" +
+                    "1. SQL Server is running and accessible\n" +
+                    "2. Authentication credentials are correct\n" +
+                    "3. Firewall allows connections on port 1433\n\n" +
+                    "For local development with Docker:\n" +
+                    "docker run -e 'ACCEPT_EULA=Y' -e 'SA_PASSWORD=YourStrong@Passw0rd' -p 1433:1433 -d mcr.microsoft.com/mssql/server:2022-latest",
+                    ex);
+            }
+            catch (InvalidOperationException ex)
+            {
+                this.logger.LogError(ex, "Invalid SQL Server configuration");
+                throw;
             }
         }
 

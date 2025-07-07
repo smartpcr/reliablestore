@@ -23,6 +23,7 @@ namespace Common.Persistence.Benchmarks
     using Common.Persistence.Factory;
     using Common.Persistence.Providers.Esent;
     using Common.Persistence.Providers.ClusterRegistry;
+    using DotNetEnv;
     using Microsoft.Extensions.Configuration;
     using Microsoft.Extensions.DependencyInjection;
     using Microsoft.Extensions.Logging;
@@ -54,6 +55,8 @@ namespace Common.Persistence.Benchmarks
         [GlobalSetup]
         public void GlobalSetup()
         {
+            Env.Load();
+
             // Skip non-Windows providers on non-Windows platforms
             if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows) && 
                 (ProviderType == "Esent" || ProviderType == "ClusterRegistry"))
