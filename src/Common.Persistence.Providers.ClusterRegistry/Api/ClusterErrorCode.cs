@@ -18,8 +18,10 @@ namespace Common.Persistence.Providers.ClusterRegistry.Api
         InvalidHandle = 6,
         NoMoreItems = 259,
         MoreData = 234,
+        NodeNotAvailable = 5036,
         ClusterNodeDown = 5050,
         ClusterNodeNotAvailable = 5036,
-        ClusterNoQuorum = 5925
+        ClusterNoQuorum = 5925,
+        HostNotFound = 11001
     }
 }

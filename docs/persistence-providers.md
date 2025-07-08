@@ -11,7 +11,7 @@ ReliableStore offers a flexible, provider-based persistence architecture that al
 
 - **Storage**: JSON files on local file system
 - **Platform**: Cross-platform (Windows, Linux, macOS)
-- **Performance**: Consistent 2-3ms per operation, scales linearly
+- **Performance**: 23-79ms for small data, scales to 327-1629ms for large data
 - **Scalability**: Limited by file system (millions of files possible)
 - **Use Cases**: Development, testing, production with moderate load, configuration storage
 
@@ -22,7 +22,7 @@ ReliableStore offers a flexible, provider-based persistence architecture that al
 
 - **Storage**: RAM (volatile)
 - **Platform**: Cross-platform
-- **Performance**: Ultra-fast (0.002-27ms for any size)
+- **Performance**: Ultra-fast (173-179 microseconds for any size)
 - **Scalability**: Limited by available memory
 - **Use Cases**: Unit tests, integration tests, caching layer, session storage
 
@@ -33,7 +33,7 @@ ReliableStore offers a flexible, provider-based persistence architecture that al
 
 - **Storage**: Embedded database (ESENT)
 - **Platform**: Windows only
-- **Performance**: High (native integration)
+- **Performance**: Good for small data, severe degradation with large payloads (up to 29s)
 - **Scalability**: Up to 16TB per database
 - **Use Cases**: Desktop applications, Windows services, local data stores
 
@@ -44,7 +44,7 @@ ReliableStore offers a flexible, provider-based persistence architecture that al
 
 - **Storage**: Windows Failover Cluster Registry
 - **Platform**: Windows Server with Failover Clustering
-- **Performance**: Fast for tiny values (<1KB), degrades exponentially with size
+- **Performance**: Excellent for small values (1-2ms), degrades 1000x with large data
 - **Scalability**: 2-64 nodes, severely limited by payload size
 - **Use Cases**: Small configuration data, feature flags, service discovery
 
@@ -52,42 +52,67 @@ ReliableStore offers a flexible, provider-based persistence architecture that al
 
 ## Provider Comparison Matrix
 
-| Feature | FileSystem | InMemory | ESENT | ClusterRegistry |
-|---------|------------|----------|-------|-----------------|
-| **Persistence** | ✅ Yes | ❌ No | ✅ Yes | ✅ Yes |
-| **Platform** | 🌍 Any | 🌍 Any | 🪟 Windows | 🪟 Windows Server |
-| **Performance** | ⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐† |
-| **Transactions** | ✅ Basic | ✅ Full | ✅ Full ACID | ✅ Batch only |
-| **Concurrency** | 🔒 File locks | 🔒 Thread-safe | 🔒 Row-level | 🔒 Distributed |
-| **Max Size** | 💾 OS limit | 💾 RAM | 💾 16TB | 💾 Memory limit* |
-| **Query Support** | ❌ None | ❌ None | ✅ Indexed | ❌ None |
-| **High Availability** | ❌ No | ❌ No | ❌ No | ✅ Automatic |
-| **Backup** | 📁 File copy | 📸 Snapshot | 💾 Online | 📋 Export |
-| **Setup Complexity** | ⭐ Simple | ⭐ None | ⭐⭐ Moderate | ⭐⭐⭐⭐ Complex |
+| Feature | FileSystem | InMemory | ESENT | ClusterRegistry | SQL Server | SQLite |
+|---------|------------|----------|-------|-----------------|------------|--------|
+| **Persistence** | ✅ Yes | ❌ No | ✅ Yes | ✅ Yes | ✅ Yes | ✅ Yes |
+| **Platform** | 🌍 Any | 🌍 Any | 🪟 Windows | 🪟 Windows Server | 🌍 Any | 🌍 Any |
+| **Performance (Small)** | ⭐⭐⭐ Good | ⭐⭐⭐⭐⭐ Excellent | ⭐⭐⭐ Good | ⭐⭐⭐⭐ Very Good | ⭐⭐ Fair | ⭐⭐ Fair |
+| **Performance (Large)** | ⭐⭐ Fair | ⭐⭐⭐⭐⭐ Excellent | ⭐ Poor† | ⭐ Poor‡ | ⭐ Very Poor§ | ⭐⭐ Fair |
+| **Transactions** | ✅ Basic | ✅ Full | ✅ Full ACID | ✅ Batch only | ✅ Full ACID | ✅ Full ACID |
+| **Concurrency** | 🔒 File locks | 🔒 Thread-safe | 🔒 Row-level | 🔒 Distributed | 🔒 Row-level | 🔒 Database-level |
+| **Max Item Size** | 💾 2GB (practical) | 💾 RAM limit | 💾 2GB | 💾 1MB¹ | 💾 2GB | 💾 1GB |
+| **Max Database Size** | 💾 OS limit | 💾 RAM | 💾 16TB | 💾 Registry limit² | 💾 524TB | 💾 281TB |
+| **Query Support** | ❌ None | ❌ None | ✅ Indexed | ❌ None | ✅ Full SQL | ✅ Full SQL |
+| **High Availability** | ❌ No | ❌ No | ❌ No | ✅ Automatic | ✅ With clustering | ❌ No |
+| **Backup** | 📁 File copy | 📸 Snapshot | 💾 Online | 📋 Export | 💾 Full featured | 📁 File copy |
+| **Setup Complexity** | ⭐ Simple | ⭐ None | ⭐⭐ Moderate | ⭐⭐⭐⭐ Complex | ⭐⭐⭐ Complex | ⭐ Simple |
+| **Memory Usage** | 🔸 Moderate | 🔹 Minimal | 🔸 Moderate | 🔺 High³ | 🔺 High | 🔸 Moderate |
 
-† Good for tiny payloads (<1KB) but degrades exponentially with size
-* Registry values can use available memory but Microsoft recommends <2KB for performance
+**Performance Notes:**
+- † ESENT: Up to 29 seconds for large payload operations
+- ‡ ClusterRegistry: 1000x performance degradation from small to large payloads
+- § SQL Server: Up to 56 seconds for large payload reads
+- ¹ ClusterRegistry: Microsoft recommends <2KB for registry values
+- ² ClusterRegistry: Limited by Windows registry constraints
+- ³ ClusterRegistry: Up to 25GB memory for 5MB payloads
 
 ### Performance Comparison
 
-Based on recent benchmarks (Windows 10/11, Intel i9-13900K, .NET Framework 4.7.2 & .NET 9.0):
+Based on recent benchmarks (Windows 11, .NET 9.0.6, X64 RyuJIT AVX-512):
 
-| Operation | FileSystem | InMemory | ESENT | ClusterRegistry |
-|-----------|------------|----------|-------|-----------------|
-| **Small (16B)** | 2.5ms | **0.002ms** ✅ | 0.4-0.5ms | 0.37ms |
-| **Medium (16KB)** | 2.3ms | **0.07ms** ✅ | 0.5ms | 30ms ⚠️ |
-| **Large (5MB)** | 64ms | **27ms** ✅ | 2-2.3s | 6,731ms ❌ |
-| **Memory Usage (5MB)** | 10MB | **5MB** ✅ | 1.5GB | 25GB ❌ |
-| **Scaling** | Linear | **Excellent** | Good | Poor |
-| **10K Ops (100KB)** | ✅ Supported | ✅ Supported | ✅ 20-28s | ❌ Not Supported |
+| Provider | Small Payload | Medium Payload | Large Payload | Memory Allocation |
+|----------|---------------|----------------|---------------|-------------------|
+| **InMemory** | **173-179 μs** ✅ | **173-179 μs** ✅ | **173-179 μs** ✅ | **8-12 KB** ✅ |
+| **ClusterRegistry** | 1.04-2.3 ms | 10-39 ms ⚠️ | 580-1,962 ms ❌ | Moderate-High |
+| **FileSystem** | 23-79 ms | 24-122 ms | 327-1,629 ms | High |
+| **ESENT** | 21-103 ms | 82-574 ms | **3.5-29.5 seconds** ❌ | High |
+| **SQL Server** | 11-82 ms | N/A | **728ms-56s** ❌ | Very High |
+| **SQLite** | 74-98 ms | N/A | 775-1,406 ms | High |
+
+#### Detailed Performance by Operation Type
+
+| Operation | InMemory | ClusterRegistry | FileSystem | ESENT |
+|-----------|----------|-----------------|------------|-------|
+| **Sequential Writes** | 173 μs | 1.04 ms → 580 ms | 24 ms → 654 ms | 21 ms → 29s |
+| **Sequential Reads** | 178 μs | 2.3 ms → 1.75s | 32 ms → 1.6s | 21 ms → 29s |
+| **Mixed Operations** | 73 μs | 1.76 ms → 1.3s | 25 ms → 1.2s | 17 ms → 26s |
+| **Batch Operations** | 175 μs | 1.04 ms → 580 ms | 23 ms → 580 ms | 21 ms → 29s |
+| **GetAll Operations** | 179 μs | 2.14 ms → 1.96s | 29 ms → 894 ms | 21 ms → 29s |
+
+*Note: Times shown as "small payload → large payload"*
 
 Key findings:
-- **InMemory**: Fastest for all payload sizes (2-1000x faster)
-- **FileSystem**: Consistent 2-3ms overhead, scales well
-- **ClusterRegistry**: Fast for tiny payloads (<1KB) but degrades exponentially
-- **ESENT**: Moderate performance, good for indexed queries
+- **InMemory**: Blazingly fast and consistent across all payload sizes (microsecond performance)
+- **ClusterRegistry**: Excellent for small payloads but degrades significantly with size
+- **FileSystem**: Good consistent performance, reasonable scaling
+- **ESENT**: Severe performance degradation with large payloads (up to 29 seconds!)
+- **SQL Server**: Worst read performance for large payloads (55+ seconds)
+- **SQLite**: Moderate but consistent performance
 
-⚠️ **Critical**: ClusterRegistry performance degrades severely with payload size (>16KB)
+⚠️ **Critical Performance Notes**:
+- ClusterRegistry performance degrades 1000x from small to large payloads
+- ESENT becomes unusable for large payloads (29+ seconds per operation)
+- SQL Server has catastrophic read performance for large data (55+ seconds)
 
 ## Choosing the Right Provider
 
@@ -426,10 +451,23 @@ public class EncryptedStore<T> : IStore<T> where T : class
 
 ## Performance Summary
 
-- __InMemory__ is by far the fastest (as expected), with consistent ~0.47ms performance across all payload sizes and operations. However, it doesn't persist data across restarts.
-- __ESENT__ Database shows good scaling characteristics - while slower than InMemory, it maintains relatively consistent performance ratios across different payload sizes and handles large data better than FileSystem.
-- __FileSystem__ struggles significantly with larger payloads, becoming up to 19x slower than ESENT for large data operations.
-- __Windows Registry__ completely failed due to built-in size limitations - this is expected as Registry keys have strict size constraints that make them unsuitable for storing anything beyond small configuration values.
+### Performance Rankings (Best to Worst)
+
+1. **InMemory** - Ultra-fast microsecond performance, ideal for caching
+2. **ClusterRegistry** - Excellent for small payloads in HA scenarios
+3. **FileSystem** - Good general-purpose performance with linear scaling
+4. **SQLite** - Consistent moderate performance across operations
+5. **ESENT** - Good for small data but catastrophic for large payloads
+6. **SQL Server** - Poor performance, especially for large data reads
+
+### Key Insights
+
+- **InMemory** achieves microsecond performance (173-179 μs) consistently across all operations and payload sizes
+- **ClusterRegistry** excels with small payloads (1-2 ms) but degrades 1000x with large data
+- **FileSystem** provides predictable performance with reasonable scaling characteristics
+- **ESENT** shows extreme performance degradation (up to 29 seconds) with large payloads
+- **SQL Server** has the worst read performance for large data (55+ seconds)
+- **SQLite** offers consistent but moderate performance without extreme degradation
 
 ## Future Providers
 

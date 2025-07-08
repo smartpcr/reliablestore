@@ -100,8 +100,10 @@ namespace Common.Persistence.Providers.ClusterRegistry.Api
             {
                 (int)ClusterErrorCode.AccessDenied => $"Access denied when connecting to {clusterDisplayName}. Ensure the current user has cluster access rights.",
                 (int)ClusterErrorCode.ClusterNodeDown => $"The {clusterDisplayName} is not available or the cluster service is not running.",
+                (int)ClusterErrorCode.NodeNotAvailable => $"The cluster node is not available. The cluster service may not be running.",
                 (int)ClusterErrorCode.ClusterNoQuorum => $"The {clusterDisplayName} does not have quorum.",
                 (int)ClusterErrorCode.FileNotFound => $"The {clusterDisplayName} was not found.",
+                (int)ClusterErrorCode.HostNotFound => $"The host for {clusterDisplayName} could not be found. Check the cluster name and network connectivity.",
                 _ => $"Failed to connect to {clusterDisplayName}. Error code: {errorCode}"
             };
         }
