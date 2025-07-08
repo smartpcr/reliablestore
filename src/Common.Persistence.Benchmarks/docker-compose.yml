@@ -36,7 +36,7 @@ services:
           sleep 1;
         done;
         echo 'Creating database if not exists...';
-        /opt/mssql-tools18/bin/sqlcmd -S sqlserver -U sa -P \"$$SA_PASSWORD\" -C -Q \"IF DB_ID(N'ReliableStoreBenchmark') IS NULL CREATE DATABASE [ReliableStoreBenchmark];\";
+        /opt/mssql-tools18/bin/sqlcmd -S sqlserver -U sa -P \"$$SA_PASSWORD\" -C -Q \"IF DB_ID(N'ReliableStoreTest') IS NULL CREATE DATABASE [ReliableStoreTest];\";
         echo 'Database setup complete';
       "
     networks:

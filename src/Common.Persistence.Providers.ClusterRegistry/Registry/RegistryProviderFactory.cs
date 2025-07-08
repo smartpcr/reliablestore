@@ -32,7 +32,7 @@ namespace Common.Persistence.Providers.ClusterRegistry.Registry
             {
                 try
                 {
-                    var clusterProvider = new ClusterRegistryProviderAdapter(clusterName);
+                    var clusterProvider = new ClusterRegistryProviderAdapter(clusterName, logger);
                     logger.LogInformation("Using Cluster Registry provider for cluster '{ClusterName}'", clusterName ?? "local");
                     return clusterProvider;
                 }
@@ -52,7 +52,7 @@ namespace Common.Persistence.Providers.ClusterRegistry.Registry
 
             // Fall back to local registry
             logger.LogInformation("Using local Windows Registry provider");
-            return new LocalRegistryProvider(rootPath);
+            return new LocalRegistryProvider(rootPath, logger);
         }
 
         private static bool IsClusterEnvironment()

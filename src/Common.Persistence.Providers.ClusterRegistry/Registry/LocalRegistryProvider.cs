@@ -9,6 +9,7 @@ namespace Common.Persistence.Providers.ClusterRegistry.Registry
     using System;
     using System.Collections.Generic;
     using System.Runtime.Versioning;
+    using Microsoft.Extensions.Logging;
     using Microsoft.Win32;
 
     /// <summary>
@@ -18,10 +19,14 @@ namespace Common.Persistence.Providers.ClusterRegistry.Registry
     internal class LocalRegistryProvider : IRegistryProvider
     {
         private readonly RegistryKey rootKey;
+        private readonly string rootPath;
+        private readonly ILogger? logger;
         private bool disposed;
 
-        public LocalRegistryProvider(string rootPath)
+        public LocalRegistryProvider(string rootPath, ILogger? logger = null)
         {
+            this.rootPath = rootPath;
+            this.logger = logger;
             // Use HKEY_LOCAL_MACHINE for local registry
             this.rootKey = Registry.LocalMachine.CreateSubKey(rootPath, true);
         }
@@ -38,7 +43,8 @@ namespace Common.Persistence.Providers.ClusterRegistry.Registry
                 throw new InvalidOperationException($"Failed to create or open registry key: {keyPath}");
             }
 
-            return new LocalRegistryKey(subKey);
+            var fullPath = $"{this.rootPath}\\{keyPath}";
+            return new LocalRegistryKey(subKey, fullPath, this.logger);
         }
 
         private void ThrowIfDisposed()
@@ -65,11 +71,15 @@ namespace Common.Persistence.Providers.ClusterRegistry.Registry
     internal class LocalRegistryKey : IRegistryKey
     {
         private readonly RegistryKey key;
+        private readonly string keyPath;
+        private readonly ILogger? logger;
         private bool disposed;
 
-        public LocalRegistryKey(RegistryKey key)
+        public LocalRegistryKey(RegistryKey key, string keyPath = "", ILogger? logger = null)
         {
             this.key = key ?? throw new ArgumentNullException(nameof(key));
+            this.keyPath = keyPath;
+            this.logger = logger;
         }
 
         public string? GetStringValue(string valueName)
@@ -81,6 +91,14 @@ namespace Common.Persistence.Providers.ClusterRegistry.Registry
         public void SetStringValue(string valueName, string value)
         {
             this.ThrowIfDisposed();
+            
+            if (this.logger?.IsEnabled(LogLevel.Debug) == true)
+            {
+                var valueLength = value?.Length ?? 0;
+                this.logger.LogDebug("Setting string value '{ValueName}' at key path 'HKLM:\\{KeyPath}', value length: {ValueLength} characters",
+                    valueName, this.keyPath, valueLength);
+            }
+            
             this.key.SetValue(valueName, value, RegistryValueKind.String);
         }
 
@@ -93,6 +111,14 @@ namespace Common.Persistence.Providers.ClusterRegistry.Registry
         public void SetBinaryValue(string valueName, byte[] value)
         {
             this.ThrowIfDisposed();
+            
+            if (this.logger?.IsEnabled(LogLevel.Debug) == true)
+            {
+                var valueLength = value?.Length ?? 0;
+                this.logger.LogDebug("Setting binary value '{ValueName}' at key path 'HKLM:\\{KeyPath}', value length: {ValueLength} bytes",
+                    valueName, this.keyPath, valueLength);
+            }
+            
             this.key.SetValue(valueName, value, RegistryValueKind.Binary);
         }
 
@@ -133,7 +159,8 @@ namespace Common.Persistence.Providers.ClusterRegistry.Registry
             {
                 throw new InvalidOperationException($"Failed to create or open subkey: {subKeyName}");
             }
-            return new LocalRegistryKey(subKey);
+            var subKeyPath = string.IsNullOrEmpty(this.keyPath) ? subKeyName : $"{this.keyPath}\\{subKeyName}";
+            return new LocalRegistryKey(subKey, subKeyPath, this.logger);
         }
 
         private void ThrowIfDisposed()

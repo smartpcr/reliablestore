@@ -9,6 +9,7 @@ namespace Common.Persistence.Providers.ClusterRegistry.Registry
     using System;
     using System.Runtime.Versioning;
     using Common.Persistence.Providers.ClusterRegistry.Api;
+    using Microsoft.Extensions.Logging;
 
     /// <summary>
     /// Registry provider that uses Windows Failover Cluster Registry.
@@ -18,10 +19,12 @@ namespace Common.Persistence.Providers.ClusterRegistry.Registry
     {
         private readonly SafeClusterHandle clusterHandle;
         private readonly SafeClusterKeyHandle rootKeyHandle;
+        private readonly ILogger? logger;
         private bool disposed;
 
-        public ClusterRegistryProviderAdapter(string? clusterName)
+        public ClusterRegistryProviderAdapter(string? clusterName, ILogger? logger = null)
         {
+            this.logger = logger;
             try
             {
                 this.clusterHandle = SafeClusterHandle.Open(clusterName);
@@ -59,7 +62,7 @@ namespace Common.Persistence.Providers.ClusterRegistry.Registry
                 shouldDisposeCurrentKey = true;
             }
 
-            return new ClusterRegistryKey(currentKey);
+            return new ClusterRegistryKey(currentKey, keyPath, this.logger);
         }
 
         private void ThrowIfDisposed()

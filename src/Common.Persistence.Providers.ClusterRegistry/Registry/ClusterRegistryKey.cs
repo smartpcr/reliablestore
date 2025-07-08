@@ -10,6 +10,7 @@ namespace Common.Persistence.Providers.ClusterRegistry.Registry
     using System.Collections.Generic;
     using System.Linq;
     using Common.Persistence.Providers.ClusterRegistry.Api;
+    using Microsoft.Extensions.Logging;
 
     /// <summary>
     /// Cluster registry key implementation.
@@ -17,11 +18,15 @@ namespace Common.Persistence.Providers.ClusterRegistry.Registry
     internal class ClusterRegistryKey : IRegistryKey
     {
         private readonly SafeClusterKeyHandle keyHandle;
+        private readonly ILogger? logger;
+        private readonly string keyPath;
         private bool disposed;
 
-        public ClusterRegistryKey(SafeClusterKeyHandle keyHandle)
+        public ClusterRegistryKey(SafeClusterKeyHandle keyHandle, string keyPath = "", ILogger? logger = null)
         {
             this.keyHandle = keyHandle ?? throw new ArgumentNullException(nameof(keyHandle));
+            this.keyPath = keyPath;
+            this.logger = logger;
         }
 
         public string? GetStringValue(string valueName)
@@ -33,6 +38,14 @@ namespace Common.Persistence.Providers.ClusterRegistry.Registry
         public void SetStringValue(string valueName, string value)
         {
             this.ThrowIfDisposed();
+            
+            if (this.logger?.IsEnabled(LogLevel.Debug) == true)
+            {
+                var valueLength = value?.Length ?? 0;
+                this.logger.LogDebug("Setting string value '{ValueName}' at key path '{KeyPath}', value length: {ValueLength} characters",
+                    valueName, this.keyPath, valueLength);
+            }
+            
             this.keyHandle.SetStringValue(valueName, value);
         }
 
@@ -45,6 +58,14 @@ namespace Common.Persistence.Providers.ClusterRegistry.Registry
         public void SetBinaryValue(string valueName, byte[] value)
         {
             this.ThrowIfDisposed();
+            
+            if (this.logger?.IsEnabled(LogLevel.Debug) == true)
+            {
+                var valueLength = value?.Length ?? 0;
+                this.logger.LogDebug("Setting binary value '{ValueName}' at key path '{KeyPath}', value length: {ValueLength} bytes",
+                    valueName, this.keyPath, valueLength);
+            }
+            
             this.keyHandle.SetBinaryValue(valueName, value);
         }
 
@@ -70,7 +91,8 @@ namespace Common.Persistence.Providers.ClusterRegistry.Registry
         {
             this.ThrowIfDisposed();
             var subKey = this.keyHandle.CreateOrOpenSubKey(subKeyName);
-            return new ClusterRegistryKey(subKey);
+            var subKeyPath = string.IsNullOrEmpty(this.keyPath) ? subKeyName : $"{this.keyPath}\\{subKeyName}";
+            return new ClusterRegistryKey(subKey, subKeyPath, this.logger);
         }
 
         private void ThrowIfDisposed()

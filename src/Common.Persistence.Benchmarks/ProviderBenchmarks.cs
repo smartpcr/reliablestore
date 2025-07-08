@@ -65,7 +65,7 @@ namespace Common.Persistence.Benchmarks
         [Params(PayloadSizes.Small, PayloadSizes.Medium, PayloadSizes.Large)]
         public PayloadSizes PayloadSize { get; set; }
 
-        [Params(ProviderTypes.SQLite)]
+        [Params(ProviderTypes.InMemory, ProviderTypes.FileSystem, ProviderTypes.SQLite, ProviderTypes.SqlServer)]
         public ProviderTypes ProviderType { get; set; }
 
         [Params(8)]
@@ -87,7 +87,7 @@ namespace Common.Persistence.Benchmarks
 
             // Setup DI container
             var services = new ServiceCollection();
-            services.AddLogging(builder => builder.SetMinimumLevel(LogLevel.Warning));
+            services.AddLogging(builder => builder.SetMinimumLevel(LogLevel.Debug));
 
             // Add configuration
             var configuration = services.AddConfiguration(this.GetProviderConfiguration());
@@ -279,7 +279,7 @@ namespace Common.Persistence.Benchmarks
 
             // ClusterRegistry provider config
             config["Providers:ClusterRegistry:Name"] = "ClusterRegistry";
-            config["Providers:ClusterRegistry:ClusterName"] = "TestCluster";
+            config["Providers:ClusterRegistry:ClusterName"] = "s-Cluster";
             config["Providers:ClusterRegistry:RootPath"] = @"Software\BenchmarkTests";
             config["Providers:ClusterRegistry:ApplicationName"] = "ReliableStoreBenchmark";
             config["Providers:ClusterRegistry:ServiceName"] = $"Benchmark_{Guid.NewGuid():N}";
