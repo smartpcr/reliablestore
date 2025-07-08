@@ -138,15 +138,7 @@ dotnet test --collect:"XPlat Code Coverage"
 dotnet test src/Common.Tx.Tests
 ```
 
-## Contributing
+## Benchmark
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests for new functionality
-5. Ensure all tests pass: `dotnet test`
-6. Submit a pull request
-
-## License
-
-This project is a proof of concept for educational purposes.
+- [file-esent-sqlite-sqlserver](https://raw.githack.com/smartpcr/reliablestore/main/src/Common.Persistence.Benchmarks/BenchmarkDotNet.Artifacts/results/BenchmarkSummary-2025-07-07b.html)
+- [inmemory-file-esent-registry](https://raw.githack.com/smartpcr/reliablestore/main/src/Common.Persistence.Benchmarks/BenchmarkDotNet.Artifacts/results/BenchmarkSummary-2025-07-08.html)
