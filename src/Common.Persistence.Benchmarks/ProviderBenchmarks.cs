@@ -65,7 +65,7 @@ namespace Common.Persistence.Benchmarks
         [Params(PayloadSizes.Small, PayloadSizes.Medium, PayloadSizes.Large)]
         public PayloadSizes PayloadSize { get; set; }
 
-        [Params(ProviderTypes.SQLite)]
+        [Params(ProviderTypes.FileSystem, ProviderTypes.Esent, ProviderTypes.SqlServer, ProviderTypes.SQLite)]
         public ProviderTypes ProviderType { get; set; }
 
         [Params(8)]
