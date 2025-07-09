@@ -187,6 +187,7 @@ Comprehensive benchmarks across different storage providers show dramatic perfor
 ### Benchmark Reports
 - [FileSystem, ESENT, SQLite, SqlServer Comparison](https://raw.githack.com/smartpcr/reliablestore/main/src/Common.Persistence.Benchmarks/BenchmarkDotNet.Artifacts/results/BenchmarkSummary-2025-07-07b.html)
 - [InMemory, FileSystem, ESENT, ClusterRegistry Comparison](https://raw.githack.com/smartpcr/reliablestore/main/src/Common.Persistence.Benchmarks/BenchmarkDotNet.Artifacts/results/BenchmarkSummary-2025-07-08.html)
+- [InMemory, FileSystem, SQLite, ClusterRegistry](https://raw.githack.com/smartpcr/reliablestore/main/src/Common.Persistence.Benchmarks/BenchmarkDotNet.Artifacts/results/BenchmarkSummary-2025-07-09.html)
 
 ## Design Principles
 
