@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Persistence Provider Benchmark Results</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #2d3748 0%, #4a5568 100%);
+            color: white;
+            padding: 40px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 3rem;
+            margin-bottom: 10px;
+            font-weight: 700;
+        }
+        
+        .header p {
+            font-size: 1.2rem;
+            opacity: 0.9;
+        }
+        
+        .controls {
+            padding: 30px 40px;
+            background: #f8fafc;
+            border-bottom: 1px solid #e2e8f0;
+            display: flex;
+            gap: 30px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        
+        .control-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .control-group label {
+            font-weight: 600;
+            color: #2d3748;
+        }
+        
+        .control-group select {
+            padding: 8px 16px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            background: white;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+        
+        .control-group select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+            padding: 40px;
+            background: #f8fafc;
+        }
+        
+        .metric-card {
+            background: white;
+            border-radius: 16px;
+            padding: 30px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.05);
+            transition: transform 0.3s, box-shadow 0.3s;
+            border: 1px solid #e2e8f0;
+        }
+        
+        .metric-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 30px rgba(0,0,0,0.1);
+        }
+        
+        .metric-header {
+            display: flex;
+            justify-content: between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        
+        .metric-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #2d3748;
+        }
+        
+        .provider-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-left: auto;
+        }
+        
+        .metric-value {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 5px;
+        }
+        
+        .metric-label {
+            color: #718096;
+            font-size: 0.9rem;
+        }
+        
+        .ranking-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            margin-top: 10px;
+        }
+        
+        .rank-1 { background: #c6f6d5; color: #22543d; }
+        .rank-2 { background: #feebc8; color: #c05621; }
+        .rank-3 { background: #fed7d7; color: #c53030; }
+        .rank-4 { background: #fed7d7; color: #c53030; }
+        
+        .chart-section {
+            padding: 40px;
+        }
+        
+        .chart-container {
+            background: white;
+            border-radius: 16px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.05);
+        }
+        
+        .chart-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #2d3748;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        
+        .chart-wrapper {
+            position: relative;
+            height: 400px;
+            margin-bottom: 20px;
+        }
+        
+        .insights {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin-top: 30px;
+        }
+        
+        .insight-section {
+            background: #f8fafc;
+            border-radius: 16px;
+            padding: 30px;
+        }
+        
+        .insight-title {
+            font-size: 1.3rem;
+            font-weight: 700;
+            color: #2d3748;
+            margin-bottom: 20px;
+        }
+        
+        .ranking-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px;
+            background: white;
+            border-radius: 10px;
+            margin-bottom: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+        
+        .ranking-left {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        
+        .rank-number {
+            font-weight: 700;
+            color: #718096;
+            font-size: 1.1rem;
+        }
+        
+        .provider-name {
+            font-weight: 600;
+            color: #2d3748;
+        }
+        
+        .performance-value {
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+            color: #4a5568;
+        }
+        
+        .characteristic-item {
+            margin-bottom: 15px;
+            padding: 15px;
+            background: white;
+            border-radius: 10px;
+            border-left: 4px solid transparent;
+        }
+        
+        @media (max-width: 768px) {
+            .insights {
+                grid-template-columns: 1fr;
+            }
+            
+            .metrics-grid {
+                grid-template-columns: 1fr;
+                padding: 20px;
+            }
+            
+            .controls {
+                flex-direction: column;
+                align-items: stretch;
+                gap: 15px;
+            }
+            
+            .header h1 {
+                font-size: 2rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Persistence Provider Benchmarks</h1>
+            <p>Performance comparison across InMemory, FileSystem, ClusterRegistry, and SQLite providers</p>
+        </div>
+        
+        <div class="controls">
+            <div class="control-group">
+                <label for="payloadSelect">Payload Size:</label>
+                <select id="payloadSelect" onchange="updateCharts()">
+                    <option value="Small">Small</option>
+                    <option value="Medium">Medium</option>
+                    <option value="Large">Large</option>
+                </select>
+            </div>
+            
+            <div class="control-group">
+                <label for="scaleSelect">Scale:</label>
+                <select id="scaleSelect" onchange="updateCharts()">
+                    <option value="linear">Linear</option>
+                    <option value="logarithmic">Logarithmic</option>
+                </select>
+            </div>
+        </div>
+        
+        <div class="metrics-grid" id="metricsGrid">
+            <!-- Metric cards will be populated by JavaScript -->
+        </div>
+        
+        <div class="chart-section">
+            <div class="chart-container">
+                <h2 class="chart-title">Performance by Operation</h2>
+                <div class="chart-wrapper">
+                    <canvas id="performanceChart"></canvas>
+                </div>
+            </div>
+            
+            <div class="chart-container">
+                <h2 class="chart-title">Performance Trends Across Payload Sizes</h2>
+                <div class="chart-wrapper">
+                    <canvas id="trendChart"></canvas>
+                </div>
+            </div>
+            
+            <div class="insights">
+                <div class="insight-section">
+                    <h3 class="insight-title">Performance Ranking</h3>
+                    <div id="rankingList">
+                        <!-- Rankings will be populated by JavaScript -->
+                    </div>
+                </div>
+                
+                <div class="insight-section">
+                    <h3 class="insight-title">Performance Characteristics</h3>
+                    <div id="characteristicsList">
+                        <div class="characteristic-item" style="border-left-color: #10B981;">
+                            <strong style="color: #10B981;">InMemory:</strong>
+                            <span style="color: #4a5568; margin-left: 10px;">Fastest, sub-millisecond performance, minimal memory usage</span>
+                        </div>
+                        <div class="characteristic-item" style="border-left-color: #3B82F6;">
+                            <strong style="color: #3B82F6;">ClusterRegistry:</strong>
+                            <span style="color: #4a5568; margin-left: 10px;">Good balance of performance and durability</span>
+                        </div>
+                        <div class="characteristic-item" style="border-left-color: #F59E0B;">
+                            <strong style="color: #F59E0B;">FileSystem:</strong>
+                            <span style="color: #4a5568; margin-left: 10px;">Moderate performance, high memory allocation</span>
+                        </div>
+                        <div class="characteristic-item" style="border-left-color: #EF4444;">
+                            <strong style="color: #EF4444;">SQLite:</strong>
+                            <span style="color: #4a5568; margin-left: 10px;">Slowest but provides full database features</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Benchmark data
+        const benchmarkData = [
+            {method: 'Sequential Write Operations', payloadSize: 'Small', provider: 'InMemory', meanMicroseconds: 172.665, allocatedKB: 8.59},
+            {method: 'Sequential Read Operations', payloadSize: 'Small', provider: 'InMemory', meanMicroseconds: 177.585, allocatedKB: 12.11},
+            {method: 'Mixed Operations (70% Read, 20% Write, 10% Delete)', payloadSize: 'Small', provider: 'InMemory', meanMicroseconds: 73.91, allocatedKB: 9.44},
+            {method: 'Batch Operations', payloadSize: 'Small', provider: 'InMemory', meanMicroseconds: 175.4, allocatedKB: 9.75},
+            {method: 'GetAll Operation', payloadSize: 'Small', provider: 'InMemory', meanMicroseconds: 180.11, allocatedKB: 9.76},
+            
+            {method: 'Sequential Write Operations', payloadSize: 'Small', provider: 'FileSystem', meanMicroseconds: 60902.54, allocatedKB: 773.655},
+            {method: 'Sequential Read Operations', payloadSize: 'Small', provider: 'FileSystem', meanMicroseconds: 82104.49, allocatedKB: 1756.03},
+            {method: 'Mixed Operations (70% Read, 20% Write, 10% Delete)', payloadSize: 'Small', provider: 'FileSystem', meanMicroseconds: 64528.69, allocatedKB: 1295.44},
+            {method: 'Batch Operations', payloadSize: 'Small', provider: 'FileSystem', meanMicroseconds: 61004.05, allocatedKB: 774.785},
+            {method: 'GetAll Operation', payloadSize: 'Small', provider: 'FileSystem', meanMicroseconds: 82858.805, allocatedKB: 1797.345},
+            
+            {method: 'Sequential Write Operations', payloadSize: 'Small', provider: 'ClusterRegistry', meanMicroseconds: 16133.88, allocatedKB: 549.7},
+            {method: 'Sequential Read Operations', payloadSize: 'Small', provider: 'ClusterRegistry', meanMicroseconds: 36900.815, allocatedKB: 1318.83},
+            {method: 'Mixed Operations (70% Read, 20% Write, 10% Delete)', payloadSize: 'Small', provider: 'ClusterRegistry', meanMicroseconds: 29273.09, allocatedKB: 971.9},
+            {method: 'Batch Operations', payloadSize: 'Small', provider: 'ClusterRegistry', meanMicroseconds: 16115, allocatedKB: 550.85},
+            
+            {method: 'Sequential Write Operations', payloadSize: 'Small', provider: 'SQLite', meanMicroseconds: 671223.225, allocatedKB: 645.85},
+            {method: 'Sequential Read Operations', payloadSize: 'Small', provider: 'SQLite', meanMicroseconds: 614940.71, allocatedKB: 1380.705},
+            {method: 'Mixed Operations (70% Read, 20% Write, 10% Delete)', payloadSize: 'Small', provider: 'SQLite', meanMicroseconds: 489443.49, allocatedKB: 1021.015},
+            {method: 'Batch Operations', payloadSize: 'Small', provider: 'SQLite', meanMicroseconds: 617819.985, allocatedKB: 647.145},
+            {method: 'GetAll Operation', payloadSize: 'Small', provider: 'SQLite', meanMicroseconds: 643801.435, allocatedKB: 1281.205},
+            
+            // Medium payload data
+            {method: 'Sequential Write Operations', payloadSize: 'Medium', provider: 'InMemory', meanMicroseconds: 172.94, allocatedKB: 8.59},
+            {method: 'Sequential Read Operations', payloadSize: 'Medium', provider: 'InMemory', meanMicroseconds: 178.25, allocatedKB: 12.11},
+            {method: 'Mixed Operations (70% Read, 20% Write, 10% Delete)', payloadSize: 'Medium', provider: 'InMemory', meanMicroseconds: 73.395, allocatedKB: 9.44},
+            {method: 'Batch Operations', payloadSize: 'Medium', provider: 'InMemory', meanMicroseconds: 175.745, allocatedKB: 9.75},
+            {method: 'GetAll Operation', payloadSize: 'Medium', provider: 'InMemory', meanMicroseconds: 179.65, allocatedKB: 9.76},
+            
+            {method: 'Sequential Write Operations', payloadSize: 'Medium', provider: 'FileSystem', meanMicroseconds: 81878.81, allocatedKB: 25459.025},
+            {method: 'Sequential Read Operations', payloadSize: 'Medium', provider: 'FileSystem', meanMicroseconds: 121862.28, allocatedKB: 75644.915},
+            {method: 'Mixed Operations (70% Read, 20% Write, 10% Delete)', payloadSize: 'Medium', provider: 'FileSystem', meanMicroseconds: 93448.975, allocatedKB: 55487.8},
+            {method: 'Batch Operations', payloadSize: 'Medium', provider: 'FileSystem', meanMicroseconds: 82587.62, allocatedKB: 25462.45},
+            {method: 'GetAll Operation', payloadSize: 'Medium', provider: 'FileSystem', meanMicroseconds: 104212.36, allocatedKB: 75679.42},
+            
+            {method: 'Sequential Write Operations', payloadSize: 'Medium', provider: 'ClusterRegistry', meanMicroseconds: 42214.41, allocatedKB: 25413.355},
+            {method: 'Sequential Read Operations', payloadSize: 'Medium', provider: 'ClusterRegistry', meanMicroseconds: 105316.585, allocatedKB: 75560.29},
+            {method: 'Mixed Operations (70% Read, 20% Write, 10% Delete)', payloadSize: 'Medium', provider: 'ClusterRegistry', meanMicroseconds: 76973.37, allocatedKB: 55432.655},
+            {method: 'Batch Operations', payloadSize: 'Medium', provider: 'ClusterRegistry', meanMicroseconds: 42481.79, allocatedKB: 25416.02},
+            
+            {method: 'Sequential Write Operations', payloadSize: 'Medium', provider: 'SQLite', meanMicroseconds: 631846.955, allocatedKB: 25496.505},
+            {method: 'Sequential Read Operations', payloadSize: 'Medium', provider: 'SQLite', meanMicroseconds: 639846.64, allocatedKB: 70784.735},
+            {method: 'Mixed Operations (70% Read, 20% Write, 10% Delete)', payloadSize: 'Medium', provider: 'SQLite', meanMicroseconds: 503766.23, allocatedKB: 51981.405},
+            {method: 'Batch Operations', payloadSize: 'Medium', provider: 'SQLite', meanMicroseconds: 635294.42, allocatedKB: 25497.73},
+            {method: 'GetAll Operation', payloadSize: 'Medium', provider: 'SQLite', meanMicroseconds: 663970.485, allocatedKB: 70675.96},
+            
+            // Large payload data
+            {method: 'Sequential Write Operations', payloadSize: 'Large', provider: 'InMemory', meanMicroseconds: 173.325, allocatedKB: 8.59},
+            {method: 'Sequential Read Operations', payloadSize: 'Large', provider: 'InMemory', meanMicroseconds: 178.645, allocatedKB: 12.11},
+            {method: 'Mixed Operations (70% Read, 20% Write, 10% Delete)', payloadSize: 'Large', provider: 'InMemory', meanMicroseconds: 73.285, allocatedKB: 9.44},
+            {method: 'Batch Operations', payloadSize: 'Large', provider: 'InMemory', meanMicroseconds: 175.88, allocatedKB: 9.75},
+            {method: 'GetAll Operation', payloadSize: 'Large', provider: 'InMemory', meanMicroseconds: 179.695, allocatedKB: 9.76},
+            
+            {method: 'Sequential Write Operations', payloadSize: 'Large', provider: 'FileSystem', meanMicroseconds: 650059.575, allocatedKB: 1221742.6},
+            {method: 'Sequential Read Operations', payloadSize: 'Large', provider: 'FileSystem', meanMicroseconds: 1615108.74, allocatedKB: 4081005.26},
+            {method: 'Mixed Operations (70% Read, 20% Write, 10% Delete)', payloadSize: 'Large', provider: 'FileSystem', meanMicroseconds: 1155997.265, allocatedKB: 2987192.355},
+            {method: 'Batch Operations', payloadSize: 'Large', provider: 'FileSystem', meanMicroseconds: 580121.105, allocatedKB: 1221743.89},
+            {method: 'GetAll Operation', payloadSize: 'Large', provider: 'FileSystem', meanMicroseconds: 892896.955, allocatedKB: 4081067.695},
+            
+            {method: 'Sequential Write Operations', payloadSize: 'Large', provider: 'ClusterRegistry', meanMicroseconds: 1411947.14, allocatedKB: 1221689.21},
+            {method: 'Sequential Read Operations', payloadSize: 'Large', provider: 'ClusterRegistry', meanMicroseconds: 3282949.2, allocatedKB: 4080937.175},
+            {method: 'Mixed Operations (70% Read, 20% Write, 10% Delete)', payloadSize: 'Large', provider: 'ClusterRegistry', meanMicroseconds: 2513358.155, allocatedKB: 2987141.88},
+            {method: 'Batch Operations', payloadSize: 'Large', provider: 'ClusterRegistry', meanMicroseconds: 1420486.02, allocatedKB: 1221690.37},
+            
+            {method: 'Sequential Write Operations', payloadSize: 'Large', provider: 'SQLite', meanMicroseconds: 1376133.415, allocatedKB: 1221784.31},
+            {method: 'Sequential Read Operations', payloadSize: 'Large', provider: 'SQLite', meanMicroseconds: 2516907.545, allocatedKB: 3836905.48},
+            {method: 'Mixed Operations (70% Read, 20% Write, 10% Delete)', payloadSize: 'Large', provider: 'SQLite', meanMicroseconds: 1870789.11, allocatedKB: 2811443.8},
+            {method: 'Batch Operations', payloadSize: 'Large', provider: 'SQLite', meanMicroseconds: 1370736.385, allocatedKB: 1221785.47},
+            {method: 'GetAll Operation', payloadSize: 'Large', provider: 'SQLite', meanMicroseconds: 2484473.955, allocatedKB: 3836803.05}
+        ];
+
+        const providers = ['InMemory', 'FileSystem', 'ClusterRegistry', 'SQLite'];
+        const operations = [
+            'Sequential Write Operations',
+            'Sequential Read Operations', 
+            'Mixed Operations (70% Read, 20% Write, 10% Delete)',
+            'Batch Operations',
+            'GetAll Operation'
+        ];
+
+        const providerColors = {
+            'InMemory': '#10B981',
+            'FileSystem': '#F59E0B', 
+            'ClusterRegistry': '#3B82F6',
+            'SQLite': '#EF4444'
+        };
+
+        let performanceChart = null;
+        let trendChart = null;
+
+        function formatValue(value) {
+            if (value < 1000) return `${Math.round(value)}μs`;
+            if (value < 1000000) return `${(value/1000).toFixed(1)}ms`;
+            return `${(value/1000000).toFixed(2)}s`;
+        }
+
+        function getProviderPerformance(payloadSize) {
+            const filtered = benchmarkData.filter(d => d.payloadSize === payloadSize);
+            const grouped = {};
+            
+            providers.forEach(provider => {
+                const providerData = filtered.filter(d => d.provider === provider);
+                const avgPerformance = providerData.reduce((sum, d) => sum + d.meanMicroseconds, 0) / providerData.length;
+                grouped[provider] = avgPerformance;
+            });
+            
+            return Object.entries(grouped)
+                .map(([provider, performance]) => ({ provider, performance }))
+                .sort((a, b) => a.performance - b.performance);
+        }
+
+        function updateMetricCards() {
+            const payloadSize = document.getElementById('payloadSelect').value;
+            const performance = getProviderPerformance(payloadSize);
+            const metricsGrid = document.getElementById('metricsGrid');
+            
+            metricsGrid.innerHTML = performance.map((item, index) => `
+                <div class="metric-card">
+                    <div class="metric-header">
+                        <h3 class="metric-title">${item.provider}</h3>
+                        <div class="provider-indicator" style="background-color: ${providerColors[item.provider]};"></div>
+                    </div>
+                    <div class="metric-value" style="color: ${providerColors[item.provider]};">
+                        ${formatValue(item.performance)}
+                    </div>
+                    <div class="metric-label">Avg Performance</div>
+                    <div class="ranking-badge rank-${index + 1}">
+                        #${index + 1} ${index === 0 ? 'Fastest' : 'Position'}
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function updateRankingList() {
+            const payloadSize = document.getElementById('payloadSelect').value;
+            const performance = getProviderPerformance(payloadSize);
+            const rankingList = document.getElementById('rankingList');
+            
+            rankingList.innerHTML = performance.map((item, index) => `
+                <div class="ranking-item">
+                    <div class="ranking-left">
+                        <span class="rank-number">#${index + 1}</span>
+                        <div class="provider-indicator" style="background-color: ${providerColors[item.provider]};"></div>
+                        <span class="provider-name">${item.provider}</span>
+                    </div>
+                    <span class="performance-value">${formatValue(item.performance)}</span>
+                </div>
+            `).join('');
+        }
+
+        function createPerformanceChart() {
+            const ctx = document.getElementById('performanceChart').getContext('2d');
+            const payloadSize = document.getElementById('payloadSelect').value;
+            const scaleType = document.getElementById('scaleSelect').value;
+            
+            const filtered = benchmarkData.filter(d => d.payloadSize === payloadSize);
+            
+            const chartData = {
+                labels: operations.map(op => op.replace('Operations', 'Ops').replace('(70% Read, 20% Write, 10% Delete)', '(R/W/D)')),
+                datasets: providers.map(provider => {
+                    const providerData = operations.map(operation => {
+                        const item = filtered.find(d => d.method === operation && d.provider === provider);
+                        return item ? item.meanMicroseconds : null;
+                    });
+                    
+                    return {
+                        label: provider,
+                        data: providerData,
+                        backgroundColor: providerColors[provider],
+                        borderColor: providerColors[provider],
+                        borderWidth: 2
+                    };
+                })
+            };
+
+            if (performanceChart) {
+                performanceChart.destroy();
+            }
+
+            performanceChart = new Chart(ctx, {
+                type: 'bar',
+                data: chartData,
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            type: scaleType,
+                            beginAtZero: scaleType === 'linear',
+                            title: {
+                                display: true,
+                                text: 'Performance (microseconds)'
+                            },
+                            ticks: {
+                                callback: function(value) {
+                                    return formatValue(value);
+                                }
+                            }
+                        },
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Operations'
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'top'
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return `${context.dataset.label}: ${formatValue(context.parsed.y)}`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function createTrendChart() {
+            const ctx = document.getElementById('trendChart').getContext('2d');
+            const payloadSizes = ['Small', 'Medium', 'Large'];
+            
+            const datasets = providers.map(provider => {
+                const data = payloadSizes.map(size => {
+                    const sizeData = benchmarkData.filter(d => d.payloadSize === size && d.provider === provider);
+                    const avgPerf = sizeData.reduce((sum, d) => sum + d.meanMicroseconds, 0) / sizeData.length;
+                    return avgPerf;
+                });
+                
+                return {
+                    label: provider,
+                    data: data,
+                    borderColor: providerColors[provider],
+                    backgroundColor: providerColors[provider] + '20',
+                    borderWidth: 3,
+                    pointRadius: 6,
+                    pointHoverRadius: 8,
+                    fill: false
+                };
+            });
+
+            if (trendChart) {
+                trendChart.destroy();
+            }
+
+            trendChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: payloadSizes,
+                    datasets: datasets
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            type: 'logarithmic',
+                            title: {
+                                display: true,
+                                text: 'Performance (microseconds)'
+                            },
+                            ticks: {
+                                callback: function(value) {
+                                    return formatValue(value);
+                                }
+                            }
+                        },
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Payload Size'
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'top'
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return `${context.dataset.label}: ${formatValue(context.parsed.y)}`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function updateCharts() {
+            updateMetricCards();
+            updateRankingList();
+            createPerformanceChart();
+        }
+
+        // Initialize the dashboard
+        window.addEventListener('load', function() {
+            updateCharts();
+            createTrendChart();
+        });
+    </script>
+</body>
+</html>
