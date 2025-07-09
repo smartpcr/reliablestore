@@ -38,7 +38,10 @@
       "Bash(docker exec:*)",
       "Bash(docker compose:*)",
       "Bash(dotnet run:*)",
-      "Bash(dotnet new:*)"
+      "Bash(dotnet new:*)",
+      "Bash(dotnet.exe test src/Common.Persistence.Providers.SQLite.Tests/Common.Persistence.Providers.SQLite.Tests.csproj --filter \"FullyQualifiedName~SQLiteProviderFailoverTests\" -v normal)",
+      "Bash(dotnet.exe build:*)",
+      "Bash(dotnet.exe test src/Common.Persistence.Providers.SQLite.Tests/Common.Persistence.Providers.SQLite.Tests.csproj --filter \"FullyQualifiedName~SQLiteProviderFailoverTests.Failover_ShouldAllowNewThreadToAcquireLockAfterPreviousThreadReleases\" --no-build -v quiet)"
     ],
     "deny": []
   }
