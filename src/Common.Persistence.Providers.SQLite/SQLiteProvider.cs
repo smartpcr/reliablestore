@@ -58,7 +58,7 @@ namespace Common.Persistence.Providers.SQLite
         {
             if (this.initialized) return;
 
-            await this.initLock.WaitAsync(cancellationToken);
+            await this.initLock.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
                 if (this.initialized) return;
@@ -357,7 +357,7 @@ namespace Common.Persistence.Providers.SQLite
         public void Dispose()
         {
             this.initLock?.Dispose();
-            
+
             // SQLite connections are automatically pooled and disposed by the connection string's cache mode
             // Force clearing the connection pool for this database
             SqliteConnection.ClearPool(new SqliteConnection(this.connectionString));
