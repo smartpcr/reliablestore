@@ -99,12 +99,8 @@ namespace Common.Persistence.Benchmarks
             services.AddKeyedSingleton<CrudStorageProviderSettings>("Esent", (_, _) => esentSettings);
             var clusterRegistrySettings = configuration.GetConfiguredSettings<ClusterRegistryStoreSettings>($"Providers:ClusterRegistry");
             services.AddKeyedSingleton<CrudStorageProviderSettings>("ClusterRegistry", (_, _) => clusterRegistrySettings);
-
             var sqlServerSettings = configuration.GetConfiguredSettings<SqlServerProviderSettings>("Providers:SqlServer");
             services.AddKeyedSingleton<CrudStorageProviderSettings>("SqlServer", (_, _) => sqlServerSettings);
-            // add settings from .env file
-
-
             var sqliteSettings = configuration.GetConfiguredSettings<SQLiteProviderSettings>("Providers:SQLite");
             services.AddKeyedSingleton<CrudStorageProviderSettings>("SQLite", (_, _) => sqliteSettings);
 

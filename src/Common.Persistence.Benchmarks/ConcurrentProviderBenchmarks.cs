@@ -11,7 +11,6 @@ namespace Common.Persistence.Benchmarks
     using System.IO;
     using System.Linq;
     using System.Runtime.InteropServices;
-    using System.Threading;
     using System.Threading.Tasks;
     using BenchmarkDotNet.Attributes;
     using BenchmarkDotNet.Configs;
@@ -23,8 +22,10 @@ namespace Common.Persistence.Benchmarks
     using Common.Persistence.Factory;
     using Common.Persistence.Providers.Esent;
     using Common.Persistence.Providers.ClusterRegistry;
+    using Common.Persistence.Providers.FileSystem;
+    using Common.Persistence.Providers.InMemory;
+    using Common.Persistence.Providers.SQLite;
     using DotNetEnv;
-    using Microsoft.Extensions.Configuration;
     using Microsoft.Extensions.DependencyInjection;
     using Microsoft.Extensions.Logging;
     using Models;
@@ -40,16 +41,16 @@ namespace Common.Persistence.Benchmarks
         private ICrudStorageProvider<Product> provider;
         private string tempDirectory;
 
-        [Params(1000, 10000)]
+        [Params(100)]
         public int OperationCount { get; set; }
 
-        [Params("Small", "Large")]
+        [Params("Small", "Medium", "Large")]
         public string PayloadSize { get; set; }
 
-        [Params("InMemory", "FileSystem", "Esent", "ClusterRegistry")]
+        [Params("InMemory", "FileSystem", "SQLite")]
         public string ProviderType { get; set; }
 
-        [Params(2, 8, 16)]
+        [Params(4)]
         public int ThreadCount { get; set; }
 
         [GlobalSetup]
@@ -58,87 +59,100 @@ namespace Common.Persistence.Benchmarks
             Env.Load();
 
             // Skip non-Windows providers on non-Windows platforms
-            if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows) && 
-                (ProviderType == "Esent" || ProviderType == "ClusterRegistry"))
+            if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows) &&
+                (this.ProviderType == "Esent" || this.ProviderType == "ClusterRegistry"))
             {
                 return;
             }
 
             // Setup temp directory
-            tempDirectory = Path.Combine(Path.GetTempPath(), $"ReliableStoreBenchmark_{Guid.NewGuid():N}");
-            Directory.CreateDirectory(tempDirectory);
+            this.tempDirectory = Path.Combine(Directory.GetCurrentDirectory(), $"BenchmarkConcurrent_{this.ProviderType}_{this.PayloadSize}");
+            Directory.CreateDirectory(this.tempDirectory);
 
             // Setup DI container
             var services = new ServiceCollection();
             services.AddLogging(builder => builder.SetMinimumLevel(LogLevel.Warning));
-            
+
             // Add configuration
-            var config = new ConfigurationBuilder()
-                .AddInMemoryCollection(GetProviderConfiguration())
-                .Build();
-            services.AddSingleton<IConfiguration>(config);
+            var configuration = services.AddConfiguration(this.GetProviderConfiguration());
+            var inMemorySettings = configuration.GetConfiguredSettings<InMemoryStoreSettings>("Providers:InMemory");
+            services.AddKeyedSingleton<CrudStorageProviderSettings>("InMemory", (_, _) => inMemorySettings);
+            var fileSystemSettings = configuration.GetConfiguredSettings<FileSystemStoreSettings>("Providers:FileSystem");
+            services.AddKeyedSingleton<CrudStorageProviderSettings>("FileSystem", (_, _) => fileSystemSettings);
+            var esentSettings = configuration.GetConfiguredSettings<EsentStoreSettings>("Providers:Esent");
+            services.AddKeyedSingleton<CrudStorageProviderSettings>("Esent", (_, _) => esentSettings);
+            var clusterRegistrySettings = configuration.GetConfiguredSettings<ClusterRegistryStoreSettings>($"Providers:ClusterRegistry");
+            services.AddKeyedSingleton<CrudStorageProviderSettings>("ClusterRegistry", (_, _) => clusterRegistrySettings);
+            var sqliteSettings = configuration.GetConfiguredSettings<SQLiteProviderSettings>("Providers:SQLite");
+            services.AddKeyedSingleton<CrudStorageProviderSettings>("SQLite", (_, _) => sqliteSettings);
 
             // Register providers
             services.AddPersistence();
 
-            serviceProvider = services.BuildServiceProvider();
+            this.serviceProvider = services.BuildServiceProvider();
 
             // Generate test data
-            testData = GenerateTestData(OperationCount, PayloadSize);
+            this.testData = this.GenerateTestData(this.OperationCount, this.PayloadSize);
 
             // Create provider
-            var factory = serviceProvider.GetRequiredService<ICrudStorageProviderFactory>();
-            provider = factory.Create<Product>(ProviderType);
+            var factory = this.serviceProvider.GetRequiredService<ICrudStorageProviderFactory>();
+            this.provider = factory.Create<Product>(this.ProviderType);
         }
 
         [GlobalCleanup]
         public void GlobalCleanup()
         {
-            provider?.Dispose();
-            
-            if (serviceProvider is IDisposable disposable)
+            this.provider.Dispose();
+
+            if (this.serviceProvider is IDisposable disposable)
             {
                 disposable.Dispose();
             }
 
             // Cleanup temp directory
-            if (Directory.Exists(tempDirectory))
+            if (Directory.Exists(this.tempDirectory))
             {
                 try
                 {
-                    Directory.Delete(tempDirectory, true);
+                    Directory.Delete(this.tempDirectory, true);
                 }
-                catch { }
+                catch
+                {
+                    // ignored
+                }
             }
 
             // Cleanup registry for ClusterRegistry provider
-            if (ProviderType == "ClusterRegistry" && RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            if (this.ProviderType == "ClusterRegistry" && RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
                 try
                 {
                     Microsoft.Win32.Registry.LocalMachine.DeleteSubKeyTree(@"Software\BenchmarkTests", false);
                 }
-                catch { }
+                catch
+                {
+                    // ignored
+                }
             }
         }
 
         [Benchmark(Description = "Concurrent Write Operations")]
         public async Task ConcurrentWrites()
         {
-            var itemsPerThread = OperationCount / ThreadCount;
-            var tasks = new Task[ThreadCount];
+            var itemsPerThread = this.OperationCount / this.ThreadCount;
+            var tasks = new Task[this.ThreadCount];
 
-            for (int t = 0; t < ThreadCount; t++)
+            for (var t = 0; t < this.ThreadCount; t++)
             {
                 var threadId = t;
                 tasks[t] = Task.Run(async () =>
                 {
                     var start = threadId * itemsPerThread;
-                    var end = (threadId == ThreadCount - 1) ? OperationCount : start + itemsPerThread;
-                    
-                    for (int i = start; i < end; i++)
+                    var end = (threadId == this.ThreadCount - 1) ? this.OperationCount : start + itemsPerThread;
+
+                    for (var i = start; i < end; i++)
                     {
-                        await provider.SaveAsync(testData[i].Id, testData[i]);
+                        await this.provider.SaveAsync(this.testData[i].Id, this.testData[i]);
                     }
                 });
             }
@@ -150,26 +164,26 @@ namespace Common.Persistence.Benchmarks
         public async Task ConcurrentReads()
         {
             // First write all data sequentially
-            foreach (var product in testData)
+            foreach (var product in this.testData)
             {
-                await provider.SaveAsync(product.Id, product);
+                await this.provider.SaveAsync(product.Id, product);
             }
 
             // Then read concurrently
-            var itemsPerThread = OperationCount / ThreadCount;
-            var tasks = new Task[ThreadCount];
+            var itemsPerThread = this.OperationCount / this.ThreadCount;
+            var tasks = new Task[this.ThreadCount];
 
-            for (int t = 0; t < ThreadCount; t++)
+            for (var t = 0; t < this.ThreadCount; t++)
             {
                 var threadId = t;
                 tasks[t] = Task.Run(async () =>
                 {
                     var start = threadId * itemsPerThread;
-                    var end = (threadId == ThreadCount - 1) ? OperationCount : start + itemsPerThread;
-                    
-                    for (int i = start; i < end; i++)
+                    var end = (threadId == this.ThreadCount - 1) ? this.OperationCount : start + itemsPerThread;
+
+                    for (var i = start; i < end; i++)
                     {
-                        var result = await provider.GetAsync(testData[i].Id);
+                        await this.provider.GetAsync(this.testData[i].Id);
                     }
                 });
             }
@@ -181,43 +195,43 @@ namespace Common.Persistence.Benchmarks
         public async Task ConcurrentMixedOperations()
         {
             // First write initial data (50% of total)
-            var initialCount = testData.Count / 2;
-            for (int i = 0; i < initialCount; i++)
+            var initialCount = this.testData.Count / 2;
+            for (var i = 0; i < initialCount; i++)
             {
-                await provider.SaveAsync(testData[i].Id, testData[i]);
+                await this.provider.SaveAsync(this.testData[i].Id, this.testData[i]);
             }
 
             // Perform concurrent mixed operations
-            var operationsPerThread = OperationCount / ThreadCount;
-            var tasks = new Task[ThreadCount];
+            var operationsPerThread = this.OperationCount / this.ThreadCount;
+            var tasks = new Task[this.ThreadCount];
 
-            for (int t = 0; t < ThreadCount; t++)
+            for (var t = 0; t < this.ThreadCount; t++)
             {
                 var threadId = t;
                 tasks[t] = Task.Run(async () =>
                 {
                     var random = new Random(42 + threadId);
-                    
-                    for (int i = 0; i < operationsPerThread; i++)
+
+                    for (var i = 0; i < operationsPerThread; i++)
                     {
                         var operation = random.Next(100);
-                        
+
                         if (operation < 70) // 70% reads
                         {
                             var index = random.Next(initialCount);
-                            await provider.GetAsync(testData[index].Id);
+                            await this.provider.GetAsync(this.testData[index].Id);
                         }
                         else if (operation < 90) // 20% writes
                         {
-                            var index = initialCount + ((threadId * operationsPerThread + i) % (testData.Count - initialCount));
-                            await provider.SaveAsync(testData[index].Id, testData[index]);
+                            var index = initialCount + ((threadId * operationsPerThread + i) % (this.testData.Count - initialCount));
+                            await this.provider.SaveAsync(this.testData[index].Id, this.testData[index]);
                         }
                         else // 10% deletes
                         {
                             var index = random.Next(initialCount);
                             try
                             {
-                                await provider.DeleteAsync(testData[index].Id);
+                                await this.provider.DeleteAsync(this.testData[index].Id);
                             }
                             catch
                             {
@@ -241,12 +255,12 @@ namespace Common.Persistence.Benchmarks
 
             // FileSystem provider config
             config["Providers:FileSystem:Name"] = "FileSystem";
-            config["Providers:FileSystem:RootPath"] = Path.Combine(tempDirectory, "FileSystem");
+            config["Providers:FileSystem:RootPath"] = Path.Combine(this.tempDirectory, "FileSystem");
             config["Providers:FileSystem:Enabled"] = "true";
 
             // ESENT provider config
             config["Providers:Esent:Name"] = "Esent";
-            config["Providers:Esent:DatabasePath"] = Path.Combine(tempDirectory, "Esent", "benchmark.db");
+            config["Providers:Esent:DatabasePath"] = Path.Combine(this.tempDirectory, "Esent", "benchmark.db");
             config["Providers:Esent:InstanceName"] = "BenchmarkInstance";
             config["Providers:Esent:UseSessionPool"] = "true";
             config["Providers:Esent:Enabled"] = "true";
@@ -265,6 +279,20 @@ namespace Common.Persistence.Benchmarks
             config["Providers:ClusterRegistry:RetryDelayMilliseconds"] = "100";
             config["Providers:ClusterRegistry:Enabled"] = "true";
 
+            // SQLite provider config
+            config["Providers:SQLite:Name"] = "SQLite";
+            config["Providers:SQLite:DataSource"] = Path.Combine(this.tempDirectory, "SQLite", "benchmark.db");
+            config["Providers:SQLite:Schema"] = "benchmark";
+            config["Providers:SQLite:Mode"] = "ReadWriteCreate";
+            config["Providers:SQLite:Cache"] = "Shared";
+            config["Providers:SQLite:ForeignKeys"] = "true";
+            config["Providers:SQLite:CommandTimeout"] = "300";
+            config["Providers:SQLite:CreateTableIfNotExists"] = "true";
+            config["Providers:SQLite:Enabled"] = "true";
+            config["Providers:SQLite:AssemblyName"] = "CRP.Common.Persistence.Providers.SQLite";
+            config["Providers:SQLite:TypeName"] = "Common.Persistence.Providers.SQLite.SQLiteProvider`1";
+            config["Providers:SQLite:Capabilities"] = "1";
+
             return config;
         }
 
@@ -273,9 +301,10 @@ namespace Common.Persistence.Benchmarks
             var products = new List<Product>(count);
             var descriptionSize = payloadSize switch
             {
-                "Small" => 100,      // ~100 bytes
-                "Large" => 10000,    // ~10 KB
-                _ => 100
+                "Small" => 1_000,      // ~1 KB
+                "Medium" => 10_000, // ~10 KB
+                "Large" => 5_000_000,    // ~5 MB
+                _ => 10_000
             };
 
             for (int i = 0; i < count; i++)
@@ -298,12 +327,12 @@ namespace Common.Persistence.Benchmarks
         {
             public BenchmarkConfig()
             {
-                AddDiagnoser(MemoryDiagnoser.Default);
-                AddDiagnoser(ThreadingDiagnoser.Default);
-                
+                this.AddDiagnoser(MemoryDiagnoser.Default);
+                this.AddDiagnoser(ThreadingDiagnoser.Default);
+
                 // Use default toolchain (out-of-process) for long-running benchmarks
                 // This avoids timeout issues with ESENT provider
-                AddJob(Job.Default
+                this.AddJob(Job.Default
                     .WithStrategy(RunStrategy.Throughput));
             }
         }
