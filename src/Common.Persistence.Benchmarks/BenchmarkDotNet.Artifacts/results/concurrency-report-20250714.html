@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Persistence Provider Benchmark Results</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            backdrop-filter: blur(10px);
+        }
+
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+            margin-bottom: 10px;
+            font-size: 2.5em;
+            font-weight: 300;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #7f8c8d;
+            margin-bottom: 40px;
+            font-size: 1.1em;
+        }
+
+        .controls {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        label {
+            font-weight: 600;
+            color: #34495e;
+            font-size: 0.9em;
+        }
+
+        select {
+            padding: 10px 15px;
+            border: 2px solid #ecf0f1;
+            border-radius: 10px;
+            background: white;
+            font-size: 14px;
+            transition: all 0.3s ease;
+            min-width: 150px;
+        }
+
+        select:focus {
+            outline: none;
+            border-color: #3498db;
+            box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+        }
+
+        .charts-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+
+        .chart-container {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
+            transition: transform 0.3s ease;
+        }
+
+        .chart-container:hover {
+            transform: translateY(-5px);
+        }
+
+        .chart-title {
+            font-size: 1.3em;
+            font-weight: 600;
+            margin-bottom: 15px;
+            text-align: center;
+            color: #2c3e50;
+        }
+
+        .chart-wrapper {
+            position: relative;
+            height: 400px;
+        }
+
+        .summary-stats {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
+            margin-top: 20px;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            border-left: 4px solid #3498db;
+        }
+
+        .stat-value {
+            font-size: 1.8em;
+            font-weight: 700;
+            margin-bottom: 5px;
+        }
+
+        .stat-label {
+            color: #6c757d;
+            font-size: 0.9em;
+        }
+
+        .provider-colors {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .provider-legend {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .color-box {
+            width: 20px;
+            height: 20px;
+            border-radius: 4px;
+        }
+
+        .performance-insights {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
+            margin-top: 20px;
+        }
+
+        .insight {
+            margin-bottom: 15px;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid;
+        }
+
+        .insight.fast { border-left-color: #27ae60; background: #d5f6e3; }
+        .insight.moderate { border-left-color: #f39c12; background: #fef5e7; }
+        .insight.slow { border-left-color: #e74c3c; background: #fadbd8; }
+
+        @media (max-width: 768px) {
+            .charts-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .controls {
+                flex-direction: column;
+                align-items: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 Persistence Provider Benchmarks</h1>
+        <p class="subtitle">Performance comparison of InMemory, FileSystem, and SQLite providers</p>
+        
+        <div class="provider-colors">
+            <div class="provider-legend">
+                <div class="color-box" style="background-color: #e74c3c;"></div>
+                <span>InMemory</span>
+            </div>
+            <div class="provider-legend">
+                <div class="color-box" style="background-color: #f39c12;"></div>
+                <span>FileSystem</span>
+            </div>
+            <div class="provider-legend">
+                <div class="color-box" style="background-color: #9b59b6;"></div>
+                <span>SQLite</span>
+            </div>
+        </div>
+
+        <div class="controls">
+            <div class="control-group">
+                <label for="methodFilter">Operation Type</label>
+                <select id="methodFilter">
+                    <option value="all">All Operations</option>
+                </select>
+            </div>
+            <div class="control-group">
+                <label for="payloadFilter">Payload Size</label>
+                <select id="payloadFilter">
+                    <option value="all">All Sizes</option>
+                </select>
+            </div>
+            <div class="control-group">
+                <label for="metricSelect">Metric</label>
+                <select id="metricSelect">
+                    <option value="meanTime">Mean Execution Time</option>
+                    <option value="allocated">Memory Allocated</option>
+                    <option value="completedWorkItems">Completed Work Items</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="charts-grid">
+            <div class="chart-container">
+                <div class="chart-title">Performance by Provider</div>
+                <div class="chart-wrapper">
+                    <canvas id="performanceChart"></canvas>
+                </div>
+            </div>
+            
+            <div class="chart-container">
+                <div class="chart-title">Performance by Operation Type</div>
+                <div class="chart-wrapper">
+                    <canvas id="operationChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div class="charts-grid">
+            <div class="chart-container">
+                <div class="chart-title">Performance by Payload Size</div>
+                <div class="chart-wrapper">
+                    <canvas id="payloadChart"></canvas>
+                </div>
+            </div>
+            
+            <div class="chart-container">
+                <div class="chart-title">Memory Usage Comparison</div>
+                <div class="chart-wrapper">
+                    <canvas id="memoryChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div class="performance-insights">
+            <h3 style="text-align: center; margin-bottom: 25px; color: #2c3e50;">💡 Performance Insights</h3>
+            <div id="insights">
+                <!-- Insights will be populated by JavaScript -->
+            </div>
+        </div>
+
+        <div class="summary-stats">
+            <h3 style="text-align: center; margin-bottom: 25px; color: #2c3e50;">📊 Summary Statistics</h3>
+            <div class="stats-grid" id="statsGrid">
+                <!-- Stats will be populated by JavaScript -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Embedded benchmark data
+        const benchmarkData = [{"provider":"FileSystem","method":"Concurrent Write Operations","payloadSize":"Large","threadCount":4,"meanTime":2123359.07,"medianTime":2378189.7,"stdDev":1704937.107,"allocated":2386.48119140625,"completedWorkItems":204,"lockContentions":0,"gen0":0,"gen1":0,"gen2":0},{"provider":"FileSystem","method":"Concurrent Read Operations","payloadSize":"Large","threadCount":4,"meanTime":8884596.17,"medianTime":10015203.1,"stdDev":3202617.695,"allocated":7971.11525390625,"completedWorkItems":403,"lockContentions":0,"gen0":3000,"gen1":3000,"gen2":3000},{"provider":"FileSystem","method":"Concurrent Mixed Operations","payloadSize":"Large","threadCount":4,"meanTime":5354032.83,"medianTime":5950694.5,"stdDev":2204061.258,"allocated":5347.812275390625,"completedWorkItems":290,"lockContentions":0,"gen0":2000,"gen1":2000,"gen2":2000},{"provider":"FileSystem","method":"Concurrent Write Operations","payloadSize":"Large","threadCount":4,"meanTime":532689.84,"medianTime":494467,"stdDev":86881.244,"allocated":2386.480068359375,"completedWorkItems":202,"lockContentions":0,"gen0":0,"gen1":0,"gen2":0},{"provider":"FileSystem","method":"Concurrent Read Operations","payloadSize":"Large","threadCount":4,"meanTime":2373179.4,"medianTime":2332224.45,"stdDev":485243.033,"allocated":7971.120537109375,"completedWorkItems":386,"lockContentions":0,"gen0":4000,"gen1":4000,"gen2":4000},{"provider":"InMemory","method":"Concurrent Write Operations","payloadSize":"Large","threadCount":4,"meanTime":92.23,"medianTime":92.34,"stdDev":0.58,"allocated":0.0180078125,"completedWorkItems":4,"lockContentions":0.4175,"gen0":0.9766,"gen1":0,"gen2":0},{"provider":"InMemory","method":"Concurrent Read Operations","payloadSize":"Large","threadCount":4,"meanTime":276.07,"medianTime":275.54,"stdDev":1.465,"allocated":0.02490234375,"completedWorkItems":4,"lockContentions":0.0166,"gen0":0.9766,"gen1":0,"gen2":0},{"provider":"InMemory","method":"Concurrent Mixed Operations","payloadSize":"Large","threadCount":4,"meanTime":239.7,"medianTime":239.45,"stdDev":0.683,"allocated":0.020458984375,"completedWorkItems":4,"lockContentions":1.4751,"gen0":0.9766,"gen1":0,"gen2":0},{"provider":"InMemory","method":"Concurrent Write Operations","payloadSize":"Large","threadCount":4,"meanTime":474.12,"medianTime":477.37,"stdDev":40.109,"allocated":0.017998046875,"completedWorkItems":4,"lockContentions":8.9395,"gen0":0.9766,"gen1":0,"gen2":0},{"provider":"InMemory","method":"Concurrent Read Operations","payloadSize":"Large","threadCount":4,"meanTime":424.41,"medianTime":432.51,"stdDev":34.416,"allocated":0.02486328125,"completedWorkItems":4,"lockContentions":0.0317,"gen0":0.9766,"gen1":0,"gen2":0},{"provider":"InMemory","method":"Concurrent Mixed Operations","payloadSize":"Large","threadCount":4,"meanTime":408.58,"medianTime":409.94,"stdDev":7.516,"allocated":0.02044921875,"completedWorkItems":4,"lockContentions":2.302,"gen0":0.9766,"gen1":0,"gen2":0},{"provider":"SQLite","method":"Concurrent Write Operations","payloadSize":"Large","threadCount":4,"meanTime":1987100.37,"medianTime":1942122.7,"stdDev":148259.628,"allocated":2386.29822265625,"completedWorkItems":4,"lockContentions":0,"gen0":0,"gen1":0,"gen2":0},{"provider":"SQLite","method":"Concurrent Read Operations","payloadSize":"Large","threadCount":4,"meanTime":3769728.23,"medianTime":3749630.8,"stdDev":37127.598,"allocated":7493.958427734375,"completedWorkItems":4,"lockContentions":0,"gen0":4000,"gen1":4000,"gen2":4000},{"provider":"SQLite","method":"Concurrent Mixed Operations","payloadSize":"Large","threadCount":4,"meanTime":3057169.7,"medianTime":2987747.3,"stdDev":143815.602,"allocated":5000.8633203125,"completedWorkItems":4,"lockContentions":0,"gen0":2000,"gen1":2000,"gen2":2000},{"provider":"SQLite","method":"Concurrent Write Operations","payloadSize":"Large","threadCount":4,"meanTime":2028263.86,"medianTime":2010524.8,"stdDev":239768.169,"allocated":2386.2969921875,"completedWorkItems":4,"lockContentions":0,"gen0":0,"gen1":0,"gen2":0},{"provider":"SQLite","method":"Concurrent Read Operations","payloadSize":"Large","threadCount":4,"meanTime":3355953.87,"medianTime":3365449.15,"stdDev":247196.685,"allocated":7493.952548828125,"completedWorkItems":4,"lockContentions":0,"gen0":4000,"gen1":4000,"gen2":4000},{"provider":"SQLite","method":"Concurrent Mixed Operations","payloadSize":"Large","threadCount":4,"meanTime":2653854.59,"medianTime":2640271.3,"stdDev":228397.661,"allocated":5154.08529296875,"completedWorkItems":4,"lockContentions":0,"gen0":2000,"gen1":2000,"gen2":2000},{"provider":"FileSystem","method":"Concurrent Write Operations","payloadSize":"Medium","threadCount":4,"meanTime":57436.28,"medianTime":57075.78,"stdDev":2191.959,"allocated":7.06185546875,"completedWorkItems":203.8889,"lockContentions":0,"gen0":333.3333,"gen1":0,"gen2":0},{"provider":"FileSystem","method":"Concurrent Read Operations","payloadSize":"Medium","threadCount":4,"meanTime":88664.61,"medianTime":87928.26,"stdDev":1934.13,"allocated":18.486787109375,"completedWorkItems":404,"lockContentions":0,"gen0":1000,"gen1":200,"gen2":0},{"provider":"FileSystem","method":"Concurrent Mixed Operations","payloadSize":"Medium","threadCount":4,"meanTime":62284.02,"medianTime":61541.88,"stdDev":1809.859,"allocated":12.705234375,"completedWorkItems":287.625,"lockContentions":0,"gen0":625,"gen1":125,"gen2":0},{"provider":"FileSystem","method":"Concurrent Write Operations","payloadSize":"Medium","threadCount":4,"meanTime":68686.49,"medianTime":67969.61,"stdDev":2822.287,"allocated":7.061875,"completedWorkItems":204,"lockContentions":0,"gen0":333.3333,"gen1":0,"gen2":0},{"provider":"FileSystem","method":"Concurrent Read Operations","payloadSize":"Medium","threadCount":4,"meanTime":167940.94,"medianTime":167490.3,"stdDev":2451.564,"allocated":18.486162109375,"completedWorkItems":402.5,"lockContentions":0,"gen0":1000,"gen1":333.3333,"gen2":0},{"provider":"FileSystem","method":"Concurrent Mixed Operations","payloadSize":"Medium","threadCount":4,"meanTime":103592.88,"medianTime":105153.92,"stdDev":9184.083,"allocated":12.677001953125,"completedWorkItems":287.6667,"lockContentions":0,"gen0":666.6667,"gen1":166.6667,"gen2":0},{"provider":"InMemory","method":"Concurrent Write Operations","payloadSize":"Medium","threadCount":4,"meanTime":84.57,"medianTime":84.06,"stdDev":0.892,"allocated":0.018017578125,"completedWorkItems":4,"lockContentions":0.1014,"gen0":0.9766,"gen1":0,"gen2":0},{"provider":"InMemory","method":"Concurrent Read Operations","payloadSize":"Medium","threadCount":4,"meanTime":273.32,"medianTime":273.13,"stdDev":0.435,"allocated":0.02490234375,"completedWorkItems":4,"lockContentions":0.0112,"gen0":0.9766,"gen1":0,"gen2":0},{"provider":"InMemory","method":"Concurrent Mixed Operations","payloadSize":"Medium","threadCount":4,"meanTime":238.11,"medianTime":238,"stdDev":0.389,"allocated":0.02046875,"completedWorkItems":4,"lockContentions":1.3264,"gen0":0.9766,"gen1":0,"gen2":0},{"provider":"InMemory","method":"Concurrent Write Operations","payloadSize":"Medium","threadCount":4,"meanTime":505.32,"medianTime":499.93,"stdDev":37.411,"allocated":0.017978515625,"completedWorkItems":4,"lockContentions":9.2778,"gen0":0.9766,"gen1":0,"gen2":0},{"provider":"InMemory","method":"Concurrent Read Operations","payloadSize":"Medium","threadCount":4,"meanTime":426.22,"medianTime":430.16,"stdDev":20.895,"allocated":0.024853515625,"completedWorkItems":4,"lockContentions":0.0317,"gen0":0.9766,"gen1":0,"gen2":0},{"provider":"InMemory","method":"Concurrent Mixed Operations","payloadSize":"Medium","threadCount":4,"meanTime":395.22,"medianTime":395.08,"stdDev":6.705,"allocated":0.0204296875,"completedWorkItems":4,"lockContentions":1.0283,"gen0":0.9766,"gen1":0,"gen2":0},{"provider":"SQLite","method":"Concurrent Write Operations","payloadSize":"Medium","threadCount":4,"meanTime":463413.37,"medianTime":464327.2,"stdDev":2810.956,"allocated":6.88052734375,"completedWorkItems":4,"lockContentions":0,"gen0":0,"gen1":0,"gen2":0},{"provider":"SQLite","method":"Concurrent Read Operations","payloadSize":"Medium","threadCount":4,"meanTime":485465.97,"medianTime":485170,"stdDev":3300.717,"allocated":17.22509765625,"completedWorkItems":4,"lockContentions":0,"gen0":0,"gen1":0,"gen2":0},{"provider":"SQLite","method":"Concurrent Mixed Operations","payloadSize":"Medium","threadCount":4,"meanTime":551387.47,"medianTime":507083.7,"stdDev":78815.847,"allocated":12.06849609375,"completedWorkItems":4,"lockContentions":0,"gen0":0,"gen1":0,"gen2":0},{"provider":"SQLite","method":"Concurrent Write Operations","payloadSize":"Medium","threadCount":4,"meanTime":512387.52,"medianTime":509205.4,"stdDev":24067.175,"allocated":6.880810546875,"completedWorkItems":4,"lockContentions":0,"gen0":0,"gen1":0,"gen2":0},{"provider":"SQLite","method":"Concurrent Read Operations","payloadSize":"Medium","threadCount":4,"meanTime":515469.96,"medianTime":510298.7,"stdDev":28232.614,"allocated":17.2260546875,"completedWorkItems":4,"lockContentions":0,"gen0":0,"gen1":0,"gen2":0},{"provider":"SQLite","method":"Concurrent Mixed Operations","payloadSize":"Medium","threadCount":4,"meanTime":598715.11,"medianTime":578380.4,"stdDev":105130.017,"allocated":12.068447265625,"completedWorkItems":4,"lockContentions":0,"gen0":0,"gen1":0,"gen2":0},{"provider":"FileSystem","method":"Concurrent Write Operations","payloadSize":"Small","threadCount":4,"meanTime":34238.74,"medianTime":34145.89,"stdDev":355.562,"allocated":1.777177734375,"completedWorkItems":104,"lockContentions":0,"gen0":83.3333,"gen1":0,"gen2":0},{"provider":"FileSystem","method":"Concurrent Read Operations","payloadSize":"Small","threadCount":4,"meanTime":70314.27,"medianTime":70293.09,"stdDev":1762.41,"allocated":3.8248828125,"completedWorkItems":303.8571,"lockContentions":0,"gen0":142.8571,"gen1":0,"gen2":0},{"provider":"FileSystem","method":"Concurrent Mixed Operations","payloadSize":"Small","threadCount":4,"meanTime":47939.74,"medianTime":46400.59,"stdDev":5307.228,"allocated":2.703017578125,"completedWorkItems":209.1818,"lockContentions":0,"gen0":90.9091,"gen1":0,"gen2":0},{"provider":"FileSystem","method":"Concurrent Write Operations","payloadSize":"Small","threadCount":4,"meanTime":60582.12,"medianTime":60740.6,"stdDev":5625.308,"allocated":1.777138671875,"completedWorkItems":104,"lockContentions":0,"gen0":76.9231,"gen1":0,"gen2":0},{"provider":"FileSystem","method":"Concurrent Read Operations","payloadSize":"Small","threadCount":4,"meanTime":156879.84,"medianTime":158920.36,"stdDev":12461.068,"allocated":3.82498046875,"completedWorkItems":302.8571,"lockContentions":0.2857,"gen0":142.8571,"gen1":0,"gen2":0},{"provider":"FileSystem","method":"Concurrent Mixed Operations","payloadSize":"Small","threadCount":4,"meanTime":94969.15,"medianTime":95111.21,"stdDev":1259.062,"allocated":2.697646484375,"completedWorkItems":208.4167,"lockContentions":0.1667,"gen0":83.3333,"gen1":0,"gen2":0},{"provider":"InMemory","method":"Concurrent Write Operations","payloadSize":"Small","threadCount":4,"meanTime":298.58,"medianTime":298.41,"stdDev":2.623,"allocated":0.018017578125,"completedWorkItems":4,"lockContentions":4.499,"gen0":0.9766,"gen1":0,"gen2":0},{"provider":"InMemory","method":"Concurrent Read Operations","payloadSize":"Small","threadCount":4,"meanTime":274.93,"medianTime":274.96,"stdDev":0.452,"allocated":0.02490234375,"completedWorkItems":4,"lockContentions":0.0269,"gen0":0.9766,"gen1":0,"gen2":0},{"provider":"InMemory","method":"Concurrent Mixed Operations","payloadSize":"Small","threadCount":4,"meanTime":237.86,"medianTime":237.77,"stdDev":2.411,"allocated":0.02046875,"completedWorkItems":4,"lockContentions":1.5437,"gen0":0.9766,"gen1":0,"gen2":0},{"provider":"InMemory","method":"Concurrent Write Operations","payloadSize":"Small","threadCount":4,"meanTime":502.13,"medianTime":496.88,"stdDev":61.338,"allocated":0.01798828125,"completedWorkItems":4,"lockContentions":6.3247,"gen0":0.9766,"gen1":0,"gen2":0},{"provider":"InMemory","method":"Concurrent Read Operations","payloadSize":"Small","threadCount":4,"meanTime":419.24,"medianTime":428.55,"stdDev":37.657,"allocated":0.024853515625,"completedWorkItems":4,"lockContentions":0.0127,"gen0":0.9766,"gen1":0,"gen2":0},{"provider":"InMemory","method":"Concurrent Mixed Operations","payloadSize":"Small","threadCount":4,"meanTime":396.41,"medianTime":397.91,"stdDev":7.196,"allocated":0.020419921875,"completedWorkItems":4,"lockContentions":0.9832,"gen0":0.9766,"gen1":0,"gen2":0},{"provider":"SQLite","method":"Concurrent Write Operations","payloadSize":"Small","threadCount":4,"meanTime":776399.43,"medianTime":773156.6,"stdDev":6505.278,"allocated":1.262919921875,"completedWorkItems":4,"lockContentions":0,"gen0":0,"gen1":0,"gen2":0},{"provider":"SQLite","method":"Concurrent Read Operations","payloadSize":"Small","threadCount":4,"meanTime":668234.3,"medianTime":559257.3,"stdDev":272723.739,"allocated":2.698330078125,"completedWorkItems":4,"lockContentions":0,"gen0":0,"gen1":0,"gen2":0},{"provider":"SQLite","method":"Concurrent Mixed Operations","payloadSize":"Small","threadCount":4,"meanTime":830743.13,"medianTime":631318.7,"stdDev":459864.48,"allocated":1.903916015625,"completedWorkItems":4,"lockContentions":0,"gen0":0,"gen1":0,"gen2":0},{"provider":"SQLite","method":"Concurrent Write Operations","payloadSize":"Small","threadCount":4,"meanTime":588289.11,"medianTime":522916.3,"stdDev":144249.357,"allocated":1.261318359375,"completedWorkItems":4,"lockContentions":0,"gen0":0,"gen1":0,"gen2":0},{"provider":"SQLite","method":"Concurrent Read Operations","payloadSize":"Small","threadCount":4,"meanTime":639239.75,"medianTime":549763.2,"stdDev":161734.208,"allocated":2.700205078125,"completedWorkItems":4,"lockContentions":0,"gen0":0,"gen1":0,"gen2":0},{"provider":"SQLite","method":"Concurrent Mixed Operations","payloadSize":"Small","threadCount":4,"meanTime":569192.92,"medianTime":533100.1,"stdDev":81158.577,"allocated":1.90423828125,"completedWorkItems":4,"lockContentions":0,"gen0":0,"gen1":0,"gen2":0}];
+
+        const providerColors = {
+            'InMemory': '#e74c3c',
+            'FileSystem': '#f39c12',
+            'SQLite': '#9b59b6'
+        };
+
+        let charts = {};
+
+        function initializeApp() {
+            console.log('Loaded benchmark data:', benchmarkData.length, 'records');
+            populateFilters();
+            createCharts();
+            updateStats();
+            generateInsights();
+        }
+
+        function populateFilters() {
+            const methods = [...new Set(benchmarkData.map(d => d.method))];
+            const payloadSizes = [...new Set(benchmarkData.map(d => d.payloadSize))];
+
+            const methodFilter = document.getElementById('methodFilter');
+            const payloadFilter = document.getElementById('payloadFilter');
+
+            methods.forEach(method => {
+                const option = document.createElement('option');
+                option.value = method;
+                option.textContent = method;
+                methodFilter.appendChild(option);
+            });
+
+            payloadSizes.forEach(size => {
+                const option = document.createElement('option');
+                option.value = size;
+                option.textContent = size;
+                payloadFilter.appendChild(option);
+            });
+
+            // Add event listeners
+            methodFilter.addEventListener('change', updateCharts);
+            payloadFilter.addEventListener('change', updateCharts);
+            document.getElementById('metricSelect').addEventListener('change', updateCharts);
+        }
+
+        function getFilteredData() {
+            const methodFilter = document.getElementById('methodFilter').value;
+            const payloadFilter = document.getElementById('payloadFilter').value;
+
+            return benchmarkData.filter(d => {
+                return (methodFilter === 'all' || d.method === methodFilter) &&
+                       (payloadFilter === 'all' || d.payloadSize === payloadFilter);
+            });
+        }
+
+        function aggregateByProvider(filteredData, metric) {
+            const grouped = {};
+            
+            filteredData.forEach(d => {
+                if (!grouped[d.provider]) {
+                    grouped[d.provider] = [];
+                }
+                if (d[metric] !== null && d[metric] !== undefined) {
+                    grouped[d.provider].push(d[metric]);
+                }
+            });
+
+            return Object.keys(grouped).map(provider => ({
+                provider,
+                value: grouped[provider].length > 0 ? 
+                    grouped[provider].reduce((a, b) => a + b, 0) / grouped[provider].length : 0
+            }));
+        }
+
+        function createCharts() {
+            // Performance by Provider Chart
+            const ctx1 = document.getElementById('performanceChart').getContext('2d');
+            charts.performance = new Chart(ctx1, {
+                type: 'bar',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Mean Time (μs)',
+                        data: [],
+                        backgroundColor: [],
+                        borderColor: [],
+                        borderWidth: 2,
+                        borderRadius: 8
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: { display: true, text: 'Time (μs)' }
+                        }
+                    }
+                }
+            });
+
+            // Operation Type Chart
+            const ctx2 = document.getElementById('operationChart').getContext('2d');
+            charts.operation = new Chart(ctx2, {
+                type: 'doughnut',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        data: [],
+                        backgroundColor: ['#3498db', '#2ecc71', '#e67e22'],
+                        borderWidth: 3,
+                        borderColor: '#fff'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { position: 'bottom' } }
+                }
+            });
+
+            // Payload Size Chart
+            const ctx3 = document.getElementById('payloadChart').getContext('2d');
+            charts.payload = new Chart(ctx3, {
+                type: 'line',
+                data: { labels: [], datasets: [] },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { position: 'top' } },
+                    scales: {
+                        y: { beginAtZero: true, title: { display: true, text: 'Time (μs)' } }
+                    },
+                    elements: {
+                        point: { radius: 6, hoverRadius: 8 },
+                        line: { tension: 0.4, borderWidth: 3 }
+                    }
+                }
+            });
+
+            // Memory Chart
+            const ctx4 = document.getElementById('memoryChart').getContext('2d');
+            charts.memory = new Chart(ctx4, {
+                type: 'bar',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Memory Allocated (MB)',
+                        data: [],
+                        backgroundColor: [],
+                        borderColor: [],
+                        borderWidth: 2,
+                        borderRadius: 8
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        y: { beginAtZero: true, title: { display: true, text: 'Memory (MB)' } }
+                    }
+                }
+            });
+
+            updateCharts();
+        }
+
+        function updateCharts() {
+            const filteredData = getFilteredData();
+            const metric = document.getElementById('metricSelect').value;
+
+            // Update Performance by Provider
+            const providerData = aggregateByProvider(filteredData, metric);
+            charts.performance.data.labels = providerData.map(d => d.provider);
+            charts.performance.data.datasets[0].data = providerData.map(d => d.value);
+            charts.performance.data.datasets[0].backgroundColor = providerData.map(d => providerColors[d.provider]);
+            charts.performance.data.datasets[0].borderColor = providerData.map(d => providerColors[d.provider]);
+            
+            const metricLabels = {
+                'meanTime': 'Mean Time (μs)',
+                'allocated': 'Memory Allocated (MB)',
+                'completedWorkItems': 'Completed Work Items'
+            };
+            charts.performance.data.datasets[0].label = metricLabels[metric];
+            charts.performance.options.scales.y.title.text = metricLabels[metric];
+            charts.performance.update();
+
+            // Update Operation Type Chart
+            const methodData = {};
+            filteredData.forEach(d => {
+                methodData[d.method] = (methodData[d.method] || 0) + d[metric];
+            });
+            charts.operation.data.labels = Object.keys(methodData);
+            charts.operation.data.datasets[0].data = Object.values(methodData);
+            charts.operation.update();
+
+            // Update Payload Size Chart
+            const payloadSizes = [...new Set(filteredData.map(d => d.payloadSize))].sort();
+            const providers = [...new Set(filteredData.map(d => d.provider))];
+            
+            charts.payload.data.labels = payloadSizes;
+            charts.payload.data.datasets = providers.map(provider => {
+                const providerData = payloadSizes.map(size => {
+                    const records = filteredData.filter(d => d.provider === provider && d.payloadSize === size);
+                    return records.length > 0 ? 
+                        records.reduce((sum, r) => sum + r[metric], 0) / records.length : 0;
+                });
+                
+                return {
+                    label: provider,
+                    data: providerData,
+                    borderColor: providerColors[provider],
+                    backgroundColor: providerColors[provider] + '20',
+                    fill: false
+                };
+            });
+            charts.payload.update();
+
+            // Update Memory Chart
+            const memoryData = aggregateByProvider(filteredData, 'allocated');
+            charts.memory.data.labels = memoryData.map(d => d.provider);
+            charts.memory.data.datasets[0].data = memoryData.map(d => d.value);
+            charts.memory.data.datasets[0].backgroundColor = memoryData.map(d => providerColors[d.provider]);
+            charts.memory.data.datasets[0].borderColor = memoryData.map(d => providerColors[d.provider]);
+            charts.memory.update();
+
+            updateStats();
+        }
+
+        function updateStats() {
+            const filteredData = getFilteredData();
+            const statsGrid = document.getElementById('statsGrid');
+            
+            const stats = {
+                'Total Tests': filteredData.length,
+                'Fastest Provider': getFastestProvider(filteredData),
+                'Avg Execution Time': `${(filteredData.reduce((sum, d) => sum + d.meanTime, 0) / filteredData.length / 1000).toFixed(2)} ms`,
+                'Total Memory Used': `${(filteredData.reduce((sum, d) => sum + (d.allocated || 0), 0)).toFixed(2)} MB`,
+                'Avg Work Items': Math.round(filteredData.reduce((sum, d) => sum + d.completedWorkItems, 0) / filteredData.length),
+                'Best Memory Efficiency': getBestMemoryProvider(filteredData)
+            };
+
+            statsGrid.innerHTML = Object.entries(stats).map(([label, value]) => `
+                <div class="stat-card">
+                    <div class="stat-value">${value}</div>
+                    <div class="stat-label">${label}</div>
+                </div>
+            `).join('');
+        }
+
+        function getFastestProvider(data) {
+            const avgTimes = {};
+            const providers = [...new Set(data.map(d => d.provider))];
+            
+            providers.forEach(provider => {
+                const providerData = data.filter(d => d.provider === provider);
+                avgTimes[provider] = providerData.reduce((sum, d) => sum + d.meanTime, 0) / providerData.length;
+            });
+            
+            return Object.keys(avgTimes).reduce((a, b) => avgTimes[a] < avgTimes[b] ? a : b);
+        }
+
+        function getBestMemoryProvider(data) {
+            const avgMemory = {};
+            const providers = [...new Set(data.map(d => d.provider))];
+            
+            providers.forEach(provider => {
+                const providerData = data.filter(d => d.provider === provider);
+                avgMemory[provider] = providerData.reduce((sum, d) => sum + (d.allocated || 0), 0) / providerData.length;
+            });
+            
+            return Object.keys(avgMemory).reduce((a, b) => avgMemory[a] < avgMemory[b] ? a : b);
+        }
+
+        function generateInsights() {
+            const insights = [
+                {
+                    type: 'fast',
+                    title: '🚀 InMemory Provider',
+                    text: 'InMemory consistently shows the fastest performance across all operations, with microsecond-level execution times. Ideal for high-frequency, low-latency scenarios.'
+                },
+                {
+                    type: 'moderate',
+                    title: '📁 FileSystem Provider',
+                    text: 'FileSystem shows moderate performance with good scalability. Performance varies significantly with payload size, making it suitable for medium-scale applications.'
+                },
+                {
+                    type: 'slow',
+                    title: '🗄️ SQLite Provider',
+                    text: 'SQLite has the highest latency but provides ACID compliance and persistence. Best suited for applications prioritizing data integrity over raw performance.'
+                }
+            ];
+
+            const insightsContainer = document.getElementById('insights');
+            insightsContainer.innerHTML = insights.map(insight => `
+                <div class="insight ${insight.type}">
+                    <strong>${insight.title}</strong><br>
+                    ${insight.text}
+                </div>
+            `).join('');
+        }
+
+        // Initialize the application
+        initializeApp();
+    </script>
+</body>
+</html>
