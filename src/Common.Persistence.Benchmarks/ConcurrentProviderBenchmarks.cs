@@ -66,7 +66,7 @@ namespace Common.Persistence.Benchmarks
             }
 
             // Setup temp directory
-            this.tempDirectory = Path.Combine(Directory.GetCurrentDirectory(), $"BenchmarkConcurrent_{this.ProviderType}_{this.PayloadSize}");
+            this.tempDirectory = Path.Combine(@"C:\ClusterStorage\Infrastructure_1\Shares\SU1_Infrastructure_1\Updates\ReliableStore", $"BenchmarkConcurrent_{this.ProviderType}_{this.PayloadSize}");
             Directory.CreateDirectory(this.tempDirectory);
 
             // Setup DI container
@@ -292,6 +292,12 @@ namespace Common.Persistence.Benchmarks
             config["Providers:SQLite:AssemblyName"] = "CRP.Common.Persistence.Providers.SQLite";
             config["Providers:SQLite:TypeName"] = "Common.Persistence.Providers.SQLite.SQLiteProvider`1";
             config["Providers:SQLite:Capabilities"] = "1";
+
+            // Performance tuning options for SQLite
+            config["Providers:SQLite:JournalMode"] = "WAL";           // Write-Ahead Logging for better concurrency
+            config["Providers:SQLite:SynchronousMode"] = "Normal";    // Good balance of safety and speed
+            config["Providers:SQLite:CacheSize"] = "-10000";          // 10MB cache for better performance
+            config["Providers:SQLite:PageSize"] = "8192";             // 8KB pages for better I/O performance
 
             return config;
         }

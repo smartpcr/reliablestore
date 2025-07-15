@@ -65,7 +65,7 @@ namespace Common.Persistence.Benchmarks
         [Params(PayloadSizes.Small, PayloadSizes.Medium, PayloadSizes.Large)]
         public PayloadSizes PayloadSize { get; set; }
 
-        [Params(ProviderTypes.InMemory, ProviderTypes.FileSystem, ProviderTypes.SQLite, ProviderTypes.SqlServer)]
+        [Params(ProviderTypes.InMemory, ProviderTypes.FileSystem, ProviderTypes.SQLite)]
         public ProviderTypes ProviderType { get; set; }
 
         [Params(8)]
@@ -76,14 +76,14 @@ namespace Common.Persistence.Benchmarks
         {
             Env.Load(); // Skip non-Windows providers on non-Windows platforms
             if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows) &&
-                (ProviderType == ProviderTypes.Esent || ProviderType == ProviderTypes.ClusterRegistry))
+                (this.ProviderType == ProviderTypes.Esent || this.ProviderType == ProviderTypes.ClusterRegistry))
             {
                 return;
             }
 
             // Setup temp directory
-            tempDirectory = Path.Combine(Path.GetTempPath(), $"ReliableStoreBenchmark_{Guid.NewGuid():N}");
-            Directory.CreateDirectory(tempDirectory);
+            this.tempDirectory = Path.Combine(@"C:\ClusterStorage\Infrastructure_1\Shares\SU1_Infrastructure_1\Updates\ReliableStore", $"Benchmark_{this.ProviderType}_{this.PayloadSize}");
+            Directory.CreateDirectory(this.tempDirectory);
 
             // Setup DI container
             var services = new ServiceCollection();
@@ -107,52 +107,58 @@ namespace Common.Persistence.Benchmarks
             // Register providers
             services.AddPersistence();
 
-            serviceProvider = services.BuildServiceProvider();
+            this.serviceProvider = services.BuildServiceProvider();
 
             // Generate test data
-            testData = GenerateTestData(OperationCount, PayloadSize);
+            this.testData = this.GenerateTestData(this.OperationCount, this.PayloadSize);
 
             // Create provider
-            var factory = serviceProvider.GetRequiredService<ICrudStorageProviderFactory>();
+            var factory = this.serviceProvider.GetRequiredService<ICrudStorageProviderFactory>();
             var providerName = this.ProviderType.ToString();
-            provider = factory.Create<Product>(providerName);
+            this.provider = factory.Create<Product>(providerName);
 
             // Set CPU affinity
-            SetCpuAffinity(CoreCount);
+            this.SetCpuAffinity(this.CoreCount);
         }
 
         [GlobalCleanup]
         public void GlobalCleanup()
         {
-            provider?.Dispose();
+            this.provider.Dispose();
 
-            if (serviceProvider is IDisposable disposable)
+            if (this.serviceProvider is IDisposable disposable)
             {
                 disposable.Dispose();
             }
 
             // Cleanup temp directory
-            if (Directory.Exists(tempDirectory))
+            if (Directory.Exists(this.tempDirectory))
             {
                 try
                 {
-                    Directory.Delete(tempDirectory, true);
+                    Directory.Delete(this.tempDirectory, true);
                 }
-                catch { }
+                catch
+                {
+                    // ignored
+                }
             }
 
             // Cleanup registry for ClusterRegistry provider
-            if (ProviderType == ProviderTypes.ClusterRegistry && RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            if (this.ProviderType == ProviderTypes.ClusterRegistry && RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
                 try
                 {
                     Microsoft.Win32.Registry.LocalMachine.DeleteSubKeyTree(@"Software\BenchmarkTests", false);
                 }
-                catch { }
+                catch
+                {
+                    // ignored
+                }
             }
 
             // Cleanup SQL Server database
-            if (ProviderType == ProviderTypes.SqlServer)
+            if (this.ProviderType == ProviderTypes.SqlServer)
             {
                 try
                 {
@@ -162,16 +168,19 @@ namespace Common.Persistence.Benchmarks
                     cmd.CommandText = "IF DB_ID('ReliableStoreBenchmark') IS NOT NULL DROP DATABASE [ReliableStoreBenchmark]";
                     cmd.ExecuteNonQuery();
                 }
-                catch { }
+                catch
+                {
+                    // ignored
+                }
             }
         }
 
         [Benchmark(Description = "Sequential Write Operations")]
         public async Task SequentialWrites()
         {
-            foreach (var product in testData)
+            foreach (var product in this.testData)
             {
-                await provider.SaveAsync(product.Id, product);
+                await this.provider.SaveAsync(product.Id, product);
             }
         }
 
@@ -179,15 +188,15 @@ namespace Common.Persistence.Benchmarks
         public async Task SequentialReads()
         {
             // First write all data
-            foreach (var product in testData)
+            foreach (var product in this.testData)
             {
-                await provider.SaveAsync(product.Id, product);
+                await this.provider.SaveAsync(product.Id, product);
             }
 
             // Then read all data
-            foreach (var product in testData)
+            foreach (var product in this.testData)
             {
-                var result = await provider.GetAsync(product.Id);
+                await this.provider.GetAsync(product.Id);
             }
         }
 
@@ -195,32 +204,32 @@ namespace Common.Persistence.Benchmarks
         public async Task MixedOperations()
         {
             // First write initial data (50% of total)
-            var initialCount = testData.Count / 2;
-            for (int i = 0; i < initialCount; i++)
+            var initialCount = this.testData.Count / 2;
+            for (var i = 0; i < initialCount; i++)
             {
-                await provider.SaveAsync(testData[i].Id, testData[i]);
+                await this.provider.SaveAsync(this.testData[i].Id, this.testData[i]);
             }
 
             // Perform mixed operations
             var random = new Random(42);
-            for (int i = 0; i < testData.Count; i++)
+            for (var i = 0; i < this.testData.Count; i++)
             {
                 var operation = random.Next(100);
 
                 if (operation < 70) // 70% reads
                 {
                     var index = random.Next(initialCount);
-                    await provider.GetAsync(testData[index].Id);
+                    await this.provider.GetAsync(this.testData[index].Id);
                 }
                 else if (operation < 90) // 20% writes
                 {
-                    var index = initialCount + (i % (testData.Count - initialCount));
-                    await provider.SaveAsync(testData[index].Id, testData[index]);
+                    var index = initialCount + (i % (this.testData.Count - initialCount));
+                    await this.provider.SaveAsync(this.testData[index].Id, this.testData[index]);
                 }
                 else // 10% deletes
                 {
                     var index = random.Next(initialCount);
-                    await provider.DeleteAsync(testData[index].Id);
+                    await this.provider.DeleteAsync(this.testData[index].Id);
                 }
             }
         }
@@ -231,10 +240,10 @@ namespace Common.Persistence.Benchmarks
             const int batchSize = 100;
 
             // Process in batches
-            for (int i = 0; i < testData.Count; i += batchSize)
+            for (var i = 0; i < this.testData.Count; i += batchSize)
             {
-                var batch = testData.Skip(i).Take(batchSize).ToList();
-                var tasks = batch.Select(p => provider.SaveAsync(p.Id, p)).ToArray();
+                var batch = this.testData.Skip(i).Take(batchSize).ToList();
+                var tasks = batch.Select(p => this.provider.SaveAsync(p.Id, p)).ToArray();
                 await Task.WhenAll(tasks);
             }
         }
@@ -243,14 +252,13 @@ namespace Common.Persistence.Benchmarks
         public async Task GetAllOperation()
         {
             // First write all data
-            foreach (var product in testData)
+            foreach (var product in this.testData)
             {
-                await provider.SaveAsync(product.Id, product);
+                await this.provider.SaveAsync(product.Id, product);
             }
 
             // Then get all
-            var all = await provider.GetAllAsync();
-            var count = all.Count();
+            await this.provider.GetAllAsync();
         }
 
         private Dictionary<string, string> GetProviderConfiguration()
@@ -263,12 +271,12 @@ namespace Common.Persistence.Benchmarks
 
             // FileSystem provider config
             config["Providers:FileSystem:Name"] = "FileSystem";
-            config["Providers:FileSystem:FolderPath"] = Path.Combine(tempDirectory, "FileSystem");
+            config["Providers:FileSystem:FolderPath"] = Path.Combine(this.tempDirectory, "FileSystem");
             config["Providers:FileSystem:Enabled"] = "true";
 
             // ESENT provider config
             config["Providers:Esent:Name"] = "Esent";
-            config["Providers:Esent:DatabasePath"] = Path.Combine(tempDirectory, "Esent", "benchmark.db");
+            config["Providers:Esent:DatabasePath"] = Path.Combine(this.tempDirectory, "Esent", "benchmark.db");
             config["Providers:Esent:InstanceName"] = "BenchmarkInstance";
             config["Providers:Esent:UseSessionPool"] = "true";
             config["Providers:Esent:Enabled"] = "true";
@@ -304,7 +312,7 @@ namespace Common.Persistence.Benchmarks
 
             // SQLite provider config
             config["Providers:SQLite:Name"] = "SQLite";
-            config["Providers:SQLite:DataSource"] = Path.Combine(tempDirectory, "SQLite", "benchmark.db");
+            config["Providers:SQLite:DataSource"] = Path.Combine(this.tempDirectory, "SQLite", "benchmark.db");
             config["Providers:SQLite:Schema"] = "benchmark";
             config["Providers:SQLite:Mode"] = "ReadWriteCreate";
             config["Providers:SQLite:Cache"] = "Shared";
@@ -315,6 +323,12 @@ namespace Common.Persistence.Benchmarks
             config["Providers:SQLite:AssemblyName"] = "CRP.Common.Persistence.Providers.SQLite";
             config["Providers:SQLite:TypeName"] = "Common.Persistence.Providers.SQLite.SQLiteProvider`1";
             config["Providers:SQLite:Capabilities"] = "1";
+
+            // Performance tuning options for SQLite
+            config["Providers:SQLite:JournalMode"] = "WAL";           // Write-Ahead Logging for better concurrency
+            config["Providers:SQLite:SynchronousMode"] = "Normal";    // Good balance of safety and speed
+            config["Providers:SQLite:CacheSize"] = "-10000";          // 10MB cache for better performance
+            config["Providers:SQLite:PageSize"] = "8192";             // 8KB pages for better I/O performance
 
             return config;
         }
@@ -330,7 +344,7 @@ namespace Common.Persistence.Benchmarks
                 _ => 1000
             };
 
-            for (int i = 0; i < count; i++)
+            for (var i = 0; i < count; i++)
             {
                 products.Add(new Product
                 {
@@ -362,12 +376,12 @@ namespace Common.Persistence.Benchmarks
         {
             public BenchmarkConfig()
             {
-                AddDiagnoser(MemoryDiagnoser.Default);
-                AddDiagnoser(ThreadingDiagnoser.Default);
+                this.AddDiagnoser(MemoryDiagnoser.Default);
+                this.AddDiagnoser(ThreadingDiagnoser.Default);
 
                 // Use default toolchain (out-of-process) for long-running benchmarks
                 // This avoids timeout issues with ESENT provider
-                AddJob(Job.Default
+                this.AddJob(Job.Default
                     .WithStrategy(RunStrategy.Throughput));
             }
         }

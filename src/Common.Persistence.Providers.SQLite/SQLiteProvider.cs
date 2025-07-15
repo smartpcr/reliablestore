@@ -138,7 +138,7 @@ namespace Common.Persistence.Providers.SQLite
             await this.EnsureInitializedAsync(cancellationToken);
 
             var keyList = keys.ToList();
-            if (!keyList.Any())
+            if (keyList.Count == 0)
             {
                 return Enumerable.Empty<T>();
             }
@@ -237,7 +237,7 @@ namespace Common.Persistence.Providers.SQLite
             await this.EnsureInitializedAsync(cancellationToken);
 
             var entityList = entities.ToList();
-            if (!entityList.Any())
+            if (entityList.Count == 0)
             {
                 return;
             }
@@ -356,11 +356,12 @@ namespace Common.Persistence.Providers.SQLite
 
         public void Dispose()
         {
-            this.initLock?.Dispose();
+            this.initLock.Dispose();
 
             // SQLite connections are automatically pooled and disposed by the connection string's cache mode
             // Force clearing the connection pool for this database
-            SqliteConnection.ClearPool(new SqliteConnection(this.connectionString));
+            using var connection = new SqliteConnection(this.connectionString);
+            SqliteConnection.ClearPool(connection);
         }
     }
 }
