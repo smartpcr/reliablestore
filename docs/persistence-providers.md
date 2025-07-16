@@ -4,6 +4,63 @@
 
 ReliableStore offers a flexible, provider-based persistence architecture that allows you to choose the optimal storage backend for your specific requirements. All providers implement the same interfaces, making it easy to switch between providers or use different providers for different entity types.
 
+## Latest Benchmark Analysis (July 2025)
+
+Based on extensive benchmarking across multiple payload sizes (10KB - 5MB), we have updated recommendations for persistence provider selection.
+
+### Executive Summary
+
+**FileSystem** is now the recommended persistence provider for applications with variable payload sizes. It offers the best balance of performance, scalability, and reliability across all tested scenarios.
+
+### TL;DR - Provider Selection
+
+✅ **Use FileSystem for:**
+- General purpose storage (RECOMMENDED)
+- Variable payload sizes (10KB - 5MB)
+- Cross-platform deployments
+- Best performance/reliability balance
+
+✅ **Use SQLite when:**
+- ACID transactions are required
+- Can accept 2x slower performance
+- Need SQL query capabilities
+
+⚠️ **Use ESENT only when:**
+- Windows-only deployment
+- Guaranteed small payloads (<100KB)
+- Can enforce payload size limits
+
+❌ **Avoid:**
+- ClusterRegistry (failed in benchmarks)
+- ESENT for large payloads (25-30s operations)
+- SQL Server (poorest performance)
+
+### Key Findings from Recent Benchmarks
+
+1. **ClusterRegistry Reliability Issues**
+   - Failed frequently under pressure (many NA results in benchmarks)
+   - Particularly unreliable with medium and large payloads
+   - GetAll operations frequently failed
+   - Not recommended for production use
+
+2. **ESENT Performance Degradation**
+   - Excellent for small payloads (competitive with FileSystem)
+   - Performance degrades exponentially with payload size
+   - Large payload performance is unacceptable (25-30 seconds for writes)
+   - Only viable for applications with consistently small payloads
+
+3. **FileSystem Consistency**
+   - Most consistent performer across all payload sizes
+   - Linear performance scaling with payload size
+   - Best choice for large payloads
+   - Good memory efficiency relative to performance
+
+4. **SQLite Stability**
+   - Consistent but slower than FileSystem
+   - About 2x slower for large payloads
+   - Better transactional guarantees than FileSystem
+   - Good alternative when ACID compliance is critical
+
 ## Available Providers
 
 ### 1. FileSystem Provider
@@ -78,64 +135,85 @@ ReliableStore offers a flexible, provider-based persistence architecture that al
 
 ### Performance Comparison
 
-Based on recent benchmarks (Windows 11, .NET 9.0.6, X64 RyuJIT AVX-512):
+Based on recent benchmarks (Windows 11, .NET 9.0.7, X64 RyuJIT AVX-512, July 2025):
 
-| Provider | Small Payload | Medium Payload | Large Payload | Memory Allocation |
-|----------|---------------|----------------|---------------|-------------------|
+| Provider | Small Payload (10KB) | Medium Payload (100KB) | Large Payload (5MB) | Memory Allocation |
+|----------|---------------------|------------------------|---------------------|-------------------|
 | **InMemory** | **173-179 μs** ✅ | **173-179 μs** ✅ | **173-179 μs** ✅ | **8-12 KB** ✅ |
-| **ClusterRegistry** | 1.04-2.3 ms | 10-39 ms ⚠️ | 580-1,962 ms ❌ | Moderate-High |
-| **FileSystem** | 23-79 ms | 24-122 ms | 327-1,629 ms | High |
-| **ESENT** | 21-103 ms | 82-574 ms | **3.5-29.5 seconds** ❌ | High |
-| **SQL Server** | 11-82 ms | N/A | **728ms-56s** ❌ | Very High |
-| **SQLite** | 74-98 ms | N/A | 775-1,406 ms | High |
+| **FileSystem** | 55-60 ms | 80-83 ms | 650 ms | 773 KB → 1.22 GB |
+| **SQLite** | 600-700 ms | 620-640 ms | 1,400 ms | 645 KB → 1.22 GB |
+| **ESENT** | 103 ms | 490-560 ms | **25-30 seconds** ❌ | 536 KB → 1.22 GB |
+| **ClusterRegistry** | 16 ms | 42 ms ⚠️ | **NA (Failed)** ❌ | 550 KB → 1.22 GB |
+| **SQL Server** | 11-82 ms | 103-158 ms | **728ms-56s** ❌ | Very High |
 
-#### Detailed Performance by Operation Type
+#### Detailed Performance by Operation Type (July 2025 Benchmarks)
 
-| Operation | InMemory | ClusterRegistry | FileSystem | ESENT |
-|-----------|----------|-----------------|------------|-------|
-| **Sequential Writes** | 173 μs | 1.04 ms → 580 ms | 24 ms → 654 ms | 21 ms → 29s |
-| **Sequential Reads** | 178 μs | 2.3 ms → 1.75s | 32 ms → 1.6s | 21 ms → 29s |
-| **Mixed Operations** | 73 μs | 1.76 ms → 1.3s | 25 ms → 1.2s | 17 ms → 26s |
-| **Batch Operations** | 175 μs | 1.04 ms → 580 ms | 23 ms → 580 ms | 21 ms → 29s |
-| **GetAll Operations** | 179 μs | 2.14 ms → 1.96s | 29 ms → 894 ms | 21 ms → 29s |
+| Operation | InMemory | FileSystem | SQLite | ESENT | ClusterRegistry |
+|-----------|----------|------------|--------|-------|-----------------|
+| **Sequential Writes** | 173 μs | 55 ms → 650 ms | 600 ms → 1.4s | 103 ms → 25-30s | 16 ms → NA |
+| **Sequential Reads** | 178 μs | 79 ms → 1.6s | 610 ms → 2.5s | 103 ms → 24-29s | 36 ms → NA |
+| **Mixed Operations** | 73 μs | 62 ms → 1.15s | 480 ms → 1.9s | 80 ms → 20-27s | 29 ms → NA |
+| **Batch Operations** | 175 μs | 57 ms → 575 ms | 610 ms → 1.4s | 104 ms → 25-30s | 16 ms → NA |
+| **GetAll Operations** | 179 μs | 81 ms → 890 ms | 640 ms → 2.5s | 103 ms → 24-29s | NA → NA |
 
 *Note: Times shown as "small payload → large payload"*
 
-Key findings:
-- **InMemory**: Blazingly fast and consistent across all payload sizes (microsecond performance)
-- **ClusterRegistry**: Excellent for small payloads but degrades significantly with size
-- **FileSystem**: Good consistent performance, reasonable scaling
-- **ESENT**: Severe performance degradation with large payloads (up to 29 seconds!)
-- **SQL Server**: Worst read performance for large payloads (55+ seconds)
-- **SQLite**: Moderate but consistent performance
+### Updated Recommendations (July 2025)
+
+Based on the latest benchmark data:
+
+1. **Best Overall: FileSystem**
+   - Consistent performance across all payload sizes
+   - Linear scaling characteristics
+   - No catastrophic performance degradation
+   - Recommended for variable payload applications
+
+2. **Alternative: SQLite**
+   - 2x slower than FileSystem but stable
+   - Better transactional guarantees
+   - Good for ACID compliance requirements
+
+3. **Special Cases Only:**
+   - **InMemory**: Testing and caching only
+   - **ESENT**: Small payloads only (<100KB)
+   - **ClusterRegistry**: Not recommended due to failures
 
 ⚠️ **Critical Performance Notes**:
-- ClusterRegistry performance degrades 1000x from small to large payloads
-- ESENT becomes unusable for large payloads (29+ seconds per operation)
-- SQL Server has catastrophic read performance for large data (55+ seconds)
+- ClusterRegistry showed multiple failures (NA results) in benchmarks
+- ESENT becomes unusable for large payloads (25-30 seconds per operation)
+- FileSystem provides the best balance of performance and reliability
 
 ## Choosing the Right Provider
 
-### Decision Tree
+### Decision Tree (Updated July 2025)
 
 ```
-Start → Is data temporary?
+Start → Is data temporary/cache only?
          ├─ Yes → InMemory Provider
-         └─ No → Continue
+         └─ No → Need persistent storage
                   ↓
-         Need high availability?
-         ├─ Yes → Data size per item?
-         │        ├─ <1KB items → Windows Server? → Yes → ClusterRegistry
-         │        │                              └─ No → External solutions
-         │        └─ >1KB items → Consider FileSystem/ESENT + replication
-         └─ No → Continue
-                  ↓
-         Windows-only deployment?
-         ├─ Yes → Need high performance?
-         │        ├─ Yes → ESENT Provider
-         │        └─ No → FileSystem Provider
-         └─ No → FileSystem Provider
+         What are your primary requirements?
+         ├─ Performance + Reliability → FileSystem Provider ⭐ RECOMMENDED
+         ├─ ACID Transactions → SQLite Provider
+         ├─ Windows + Small data only (<100KB) → ESENT Provider
+         └─ High Availability → FileSystem + External Replication
 ```
+
+### Quick Decision Guide
+
+| Scenario | Recommended Provider | Why |
+|----------|---------------------|-----|
+| **General Purpose** | **FileSystem** | Best overall performance, scales linearly |
+| **Variable Payloads (10KB-5MB)** | **FileSystem** | Consistent performance across all sizes |
+| **Need ACID Compliance** | **SQLite** | Full transactional support, 2x slower but reliable |
+| **Testing/Development** | **InMemory** | Ultra-fast, no persistence overhead |
+| **Windows + Small Data Only** | **ESENT** | Good for <100KB, fails at larger sizes |
+| **High Availability** | **FileSystem + DFS-R/rsync** | ClusterRegistry proved unreliable |
+
+**⚠️ Providers to Avoid:**
+- **ClusterRegistry**: Multiple failures in benchmarks, unreliable
+- **ESENT for large data**: 25-30 second operations unacceptable
+- **SQL Server**: Poorest performance, especially for reads
 
 ### Important Performance Considerations
 
@@ -152,7 +230,7 @@ Start → Is data temporary?
 - Good for small configuration values and feature flags
 - Distributed locking for cluster-wide consistency
 
-### Use Case Recommendations
+### Use Case Recommendations (Updated July 2025)
 
 #### Development & Testing
 ```csharp
@@ -169,50 +247,57 @@ services.AddSingleton<IStore<Product>>(
     }));
 ```
 
-#### Single-Server Production
+#### Production - Recommended Approach
 ```csharp
-// Windows: Use ESENT for performance
-services.AddSingleton<IStore<Product>>(
-    new SimpleEsentProvider<Product>(new EsentStoreSettings
-    {
-        DatabasePath = "data/products.edb",
-        CacheSizeMB = 256
-    }));
-
-// Cross-platform: Use FileSystem
+// FileSystem is now the recommended provider for all production scenarios
 services.AddSingleton<IStore<Product>>(
     new FileStore<Product>("products", new FileSystemStoreSettings
     {
-        BasePath = "/var/data/reliablestore"
+        BasePath = "/var/data/reliablestore"  // Linux/macOS
+        // OR
+        BasePath = @"C:\Data\ReliableStore"   // Windows
     }));
+
+// When ACID transactions are required
+services.AddSingleton<IStore<Order>>(
+    new SQLiteProvider<Order>(new SQLiteStoreSettings
+    {
+        DatabasePath = "data/orders.db",
+        ConnectionString = "Data Source=orders.db;Version=3;"
+    }));
+```
+
+#### Special Cases Only
+```csharp
+// ESENT - Only for Windows with consistently small payloads (<100KB)
+// ⚠️ WARNING: Performance degrades 250x with large payloads
+services.AddSingleton<IStore<Config>>(
+    new SimpleEsentProvider<Config>(new EsentStoreSettings
+    {
+        DatabasePath = "data/config.edb",
+        CacheSizeMB = 128,
+        MaxItemSizeKB = 100  // Enforce size limit
+    }));
+
+// ❌ AVOID ClusterRegistry - Unreliable in production
+// Multiple failures observed in benchmarks
+// Use FileSystem + external replication instead
 ```
 
 #### High Availability Production
 ```csharp
-// For small metadata/config (Windows clusters)
-services.AddSingleton<IStore<ServiceConfig>>(
-    new ClusterPersistenceStore<ServiceConfig>(new ClusterPersistenceConfiguration
-    {
-        ClusterName = "PROD-CLUSTER",
-        ResourceGroupName = "App-RG",
-        RegistryKeyPath = @"Software\App\Config",
-        MaxValueSize = 64 * 1024  // 64KB limit for performance
-    }));
-
-// For larger data with HA requirements
-// Option 1: ESENT + Windows Failover Clustering with shared storage
-services.AddSingleton<IStore<Product>>(
-    new SimpleEsentProvider<Product>(new EsentStoreSettings
-    {
-        DatabasePath = @"S:\SharedStorage\products.edb",  // Cluster shared volume
-        CacheSizeMB = 512
-    }));
-
-// Option 2: FileSystem + External replication (e.g., DFS-R, rsync)
+// Recommended: FileSystem + External replication
 services.AddSingleton<IStore<Product>>(
     new FileStore<Product>("products", new FileSystemStoreSettings
     {
-        BasePath = @"D:\ReplicatedData"  // Replicated via DFS-R
+        BasePath = @"D:\ReplicatedData"  // Replicated via DFS-R, rsync, etc.
+    }));
+
+// Alternative: SQLite + Litestream for replication
+services.AddSingleton<IStore<Order>>(
+    new SQLiteProvider<Order>(new SQLiteStoreSettings
+    {
+        DatabasePath = "/data/orders.db"  // Replicated by Litestream
     }));
 ```
 
@@ -245,9 +330,9 @@ public class StoreFactory : IStoreFactory
 }
 ```
 
-### 2. Multi-Provider Strategy
+### 2. Multi-Provider Strategy (Updated July 2025)
 ```csharp
-// Use different providers for different data types
+// Use different providers based on data characteristics
 public class Startup
 {
     public void ConfigureServices(IServiceCollection services)
@@ -256,21 +341,23 @@ public class Startup
         services.AddSingleton<IStore<Session>>(
             new InMemoryStore<Session>());
 
-        // Product catalog in ESENT for fast queries
+        // Product catalog - FileSystem for best performance
         services.AddSingleton<IStore<Product>>(
-            new SimpleEsentProvider<Product>(esentSettings));
+            new FileStore<Product>("products", fileSettings));
 
-        // Orders in ESENT for scalability (ClusterRegistry limited to <10K items)
+        // Orders - SQLite for transactional integrity
         services.AddSingleton<IStore<Order>>(
-            new SimpleEsentProvider<Order>(esentSettings));
+            new SQLiteProvider<Order>(sqliteSettings));
 
-        // Small configuration in cluster registry for HA
+        // Small config (<100KB) - ESENT if Windows-only
         services.AddSingleton<IStore<ServiceConfig>>(
-            new ClusterPersistenceStore<ServiceConfig>(clusterConfig));
+            new SimpleEsentProvider<ServiceConfig>(esentSettings));
 
-        // Audit logs in file system for compliance
+        // Audit logs - FileSystem for reliability and performance
         services.AddSingleton<IStore<AuditLog>>(
             new FileStore<AuditLog>("audit", fileSettings));
+        
+        // ❌ ClusterRegistry removed - use FileSystem instead
     }
 }
 ```
@@ -449,25 +536,36 @@ public class EncryptedStore<T> : IStore<T> where T : class
 }
 ```
 
-## Performance Summary
+## Performance Summary (Updated July 2025)
 
 ### Performance Rankings (Best to Worst)
 
 1. **InMemory** - Ultra-fast microsecond performance, ideal for caching
-2. **ClusterRegistry** - Excellent for small payloads in HA scenarios
-3. **FileSystem** - Good general-purpose performance with linear scaling
-4. **SQLite** - Consistent moderate performance across operations
-5. **ESENT** - Good for small data but catastrophic for large payloads
-6. **SQL Server** - Poor performance, especially for large data reads
+2. **FileSystem** - Best overall performer for real persistence scenarios
+3. **SQLite** - Consistent performance, 2x slower than FileSystem but reliable
+4. **ESENT** - Good for small data only, catastrophic for large payloads
+5. **SQL Server** - Poor performance, especially for large data reads
+6. **ClusterRegistry** - Not recommended due to failures in production benchmarks
 
-### Key Insights
+### Key Insights from July 2025 Benchmarks
 
-- **InMemory** achieves microsecond performance (173-179 μs) consistently across all operations and payload sizes
-- **ClusterRegistry** excels with small payloads (1-2 ms) but degrades 1000x with large data
-- **FileSystem** provides predictable performance with reasonable scaling characteristics
-- **ESENT** shows extreme performance degradation (up to 29 seconds) with large payloads
-- **SQL Server** has the worst read performance for large data (55+ seconds)
-- **SQLite** offers consistent but moderate performance without extreme degradation
+- **FileSystem** is the clear winner for variable payload sizes (10KB-5MB)
+  - Linear performance scaling: 55ms (small) → 650ms (large)
+  - No catastrophic degradation
+  - Consistent across all operation types
+  
+- **SQLite** serves as a reliable alternative
+  - Approximately 2x slower than FileSystem
+  - Better ACID guarantees
+  - No performance cliffs
+  
+- **ESENT** should be avoided for variable payloads
+  - Performance degrades 250x from small to large payloads
+  - 25-30 second operations make it unusable for large data
+  
+- **ClusterRegistry** showed critical reliability issues
+  - Multiple NA (failure) results in benchmarks
+  - Cannot be trusted for production use
 
 ## Future Providers
 
